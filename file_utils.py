@@ -5,7 +5,7 @@ from model.league import League
 from model.team import Team
 
 def write_league_assignments_to_file(leagues: List[League], filename: str):
-    template = "{league_name},{team_number}\n"
+    template = "{team_number},{league_name}\n"
 
     with open(filename, "w") as file:
         for league in leagues:

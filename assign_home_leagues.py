@@ -15,11 +15,11 @@ from model.team import Team
 
 NUMBER_OF_ITERATIONS = 100
 
-TEAM_FILE = "./data/2024-2025-teams.csv"
-LEAGUE_FILE = "./data/2024-2025-events.csv"
-PRE_ASSIGNMENTS_FILE = "./data/2024-2025-pre-assignments.csv"
-MAP_OUTPUT_FILE = "./output/24_25_home_league_map.csv"
-HOME_LEAGUE_ASSIGNMENT_FILE = "./output/24_25_home_league_assignments.csv"
+TEAM_FILE = "./data/2025-2026-teams.csv"
+LEAGUE_FILE = "./data/2025-2026-events.csv"
+PRE_ASSIGNMENTS_FILE = "./data/2025-2026-pre-assignments.csv"
+MAP_OUTPUT_FILE = "./output/25_26_home_league_map.csv"
+HOME_LEAGUE_ASSIGNMENT_FILE = "./output/25_26_home_league_assignments.csv"
 
 # 7/28/24 Notes
 # At present the Zip Code Assignment appears to produce better results when combined with
