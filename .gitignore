@@ -1,5 +1,8 @@
 .idea/
 
+# Git credential helpers
+.git-askpass.sh
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -57,4 +60,5 @@ test.py
 
 # Ignore local data I/O files
 data/
+.data/
 output/

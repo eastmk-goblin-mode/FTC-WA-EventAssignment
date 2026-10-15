@@ -5,10 +5,47 @@ All of the code in this repo is meant to be used for assigning FTC teams to leag
 ## Setup
 
 ### Prerequisites
-- Python 3.11 or higher
+- Python 3.12 or higher
 - [uv](https://github.com/astral-sh/uv) package manager (recommended) or pip
 
-### Installation
+### Option 1: GitHub Codespaces (Recommended)
+
+Launch a pre-configured development environment directly in your browser:
+
+1. **Create a codespace:**
+   - Go to https://github.com/eastmk-goblin-mode/FTC-WA-EventAssignment
+   - Click the green **Code** button
+   - Select the **Codespaces** tab
+   - Click **Create codespace on main** (or your working branch)
+
+2. **Wait for setup to complete:**
+   - The codespace will automatically install Python 3.12 and all dependencies
+   - Setup typically takes 1-2 minutes
+   - You'll see "Running postCreateCommand..." in the terminal
+
+3. **Set up your data directory:**
+   ```bash
+   mkdir -p .data
+   # Place your input files (teams, leagues, preferences) in .data/
+   ```
+
+4. **Run the assignment workflow:**
+   ```bash
+   # Example: Assign teams to home leagues
+   python assign_home_leagues.py --teams .data/teams.csv --leagues .data/leagues.csv
+   
+   # Process event preferences
+   python process_event_preferences.py --preferences .data/preferences.csv
+   ```
+
+**Cost management:**
+- Free tier: 120 core-hours/month (60 hours on the default 2-core machine)
+- Codespaces auto-stop after 30 minutes of inactivity (configurable in [Settings → Codespaces](https://github.com/settings/codespaces))
+- Storage is free for the default dev container configuration
+
+For detailed Codespaces setup and troubleshooting, see [CODESPACES.md](CODESPACES.md).
+
+### Option 2: Local Installation
 
 1. Clone the repository:
    ```bash
