@@ -4,9 +4,10 @@ import math
 
 
 def load_zips(path):
-    """Load Washington zip code centroids from CSV.
+    """Load zip code centroids from CSV.
     
     Returns: {zip: (lat, lon, city, county)}
+    City and county are optional and default to empty strings.
     """
     zips = {}
     with open(path) as f:
@@ -14,8 +15,8 @@ def load_zips(path):
             zips[row["zip"]] = (
                 float(row["lat"]),
                 float(row["lon"]),
-                row["city"],
-                row["county"]
+                row.get("city", ""),
+                row.get("county", "")
             )
     return zips
 

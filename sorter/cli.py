@@ -24,9 +24,10 @@ def load_events(path):
 
 
 def load_teams(path):
-    """Load teams from CSV: number, name, zip."""
+    """Load teams from CSV: number, name, zip, [optional_host_team]."""
     teams = []
     team_names = {}
+    team_host = {}
     with open(path, encoding="utf-8-sig") as f:
         reader = csv.reader(f)
         for row in reader:
@@ -37,7 +38,9 @@ def load_teams(path):
                 })
                 if len(row) > 1:
                     team_names[row[0]] = row[1]
-    return teams, team_names
+                if len(row) > 3:
+                    team_host[row[0]] = row[3]
+    return teams, team_names, team_host
 
 
 def load_pre_assignments(path):
@@ -60,7 +63,7 @@ def load_pre_assignments(path):
     return locks
 
 
-def write_map_output(output_path, teams, team_names, assignment, events, zips,
+def write_map_output(output_path, teams, team_names, team_host, assignment, events, zips,
                      distance_fn, mode, program, flag_over=90):
     """Write the map file for visualization.
     
@@ -69,7 +72,7 @@ def write_map_output(output_path, teams, team_names, assignment, events, zips,
       event_zipCode, event_coordinates, program
     
     Additional columns (operational):
-      miles/drive_minutes, status, flag_reason
+      host_team, miles/drive_minutes, status, flag_reason
     """
     event_zips = {e["code"]: e["zip"] for e in events}
     status_count = Counter()
@@ -89,7 +92,7 @@ def write_map_output(output_path, teams, team_names, assignment, events, zips,
         writer.writerow([
             "team_id", "team_name", "team_zipCode", "team_coordinates",
             "event_id", "event_zipCode", "event_coordinates", "program",
-            distance_col, "status", "flag_reason"
+            "host_team", distance_col, "status", "flag_reason"
         ])
         
         # Rows
@@ -132,6 +135,7 @@ def write_map_output(output_path, teams, team_names, assignment, events, zips,
                 event_zip,                          # event_zipCode
                 event_wkt,                          # event_coordinates
                 program,                            # program
+                team_host.get(team["num"], ""),     # host_team
                 distance,                           # miles or drive_minutes
                 status,                             # status
                 reason                              # flag_reason
@@ -189,7 +193,7 @@ def main():
         
         zips = geo.load_zips(zips_path)
         events = load_events(args.events)
-        teams, team_names = load_teams(args.teams)
+        teams, team_names, team_host = load_teams(args.teams)
         locks = load_pre_assignments(args.pre_assignments)
         
         # Determine distance function
@@ -224,6 +228,7 @@ def main():
             output_path=args.out,
             teams=teams,
             team_names=team_names,
+            team_host=team_host,
             assignment=assignment,
             events=events,
             zips=zips,
