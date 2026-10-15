@@ -1,5 +1,21 @@
 {
   "name": "FTC WA Event Assignment",
   "image": "mcr.microsoft.com/devcontainers/python:3.12",
-  "postCreateCommand": "pip install -r requirements.txt"
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "hostRequirements": {
+    "cpus": 2,
+    "memory": "8gb",
+    "storage": "32gb"
+  },
+  "forwardPorts": [5055],
+  "portsAttributes": {
+    "5055": {
+      "label": "OSRM (optional routing)",
+      "onAutoForward": "silent"
+    }
+  },
+  "postCreateCommand": "pip install -r requirements.txt && bash setup.sh",
+  "waitFor": "postCreateCommand"
 }
