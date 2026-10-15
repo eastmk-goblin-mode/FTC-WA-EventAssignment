@@ -61,11 +61,15 @@ def load_pre_assignments(path):
 
 
 def write_map_output(output_path, teams, team_names, assignment, events, zips,
-                     distance_fn, mode, flag_over=90):
+                     distance_fn, mode, program, flag_over=90):
     """Write the map file for visualization.
     
-    Columns: WKT, team_code, event_location, event_WKT, team_name, zip_code,
-             distance_metric, status, flag_reason
+    Required columns (map team):
+      team_id, team_name, team_zipCode, team_coordinates, event_id, 
+      event_zipCode, event_coordinates, program
+    
+    Additional columns (operational):
+      miles/drive_minutes, status, flag_reason
     """
     event_zips = {e["code"]: e["zip"] for e in events}
     status_count = Counter()
@@ -80,11 +84,12 @@ def write_map_output(output_path, teams, team_names, assignment, events, zips,
     with open(output_path, "w", newline="") as f:
         writer = csv.writer(f, quoting=csv.QUOTE_MINIMAL)
         
-        # Header
+        # Header - required columns first, then operational columns
         distance_col = "drive_minutes" if mode == "drive" else "miles"
         writer.writerow([
-            "WKT", "team_code", "event_location", "event_WKT", "team_name",
-            "zip_code", distance_col, "status", "flag_reason"
+            "team_id", "team_name", "team_zipCode", "team_coordinates",
+            "event_id", "event_zipCode", "event_coordinates", "program",
+            distance_col, "status", "flag_reason"
         ])
         
         # Rows
@@ -95,6 +100,7 @@ def write_map_output(output_path, teams, team_names, assignment, events, zips,
             
             if not event_code:
                 # Unassigned
+                event_zip = ""
                 event_wkt = ""
                 distance = ""
                 if zip_code not in zips:
@@ -105,8 +111,9 @@ def write_map_output(output_path, teams, team_names, assignment, events, zips,
                     reason = "no event with room"
             else:
                 # Assigned
-                event_wkt = wkt(event_zips[event_code])
-                distance = round(distance_fn(zip_code, event_zips[event_code]), 1)
+                event_zip = event_zips[event_code]
+                event_wkt = wkt(event_zip)
+                distance = round(distance_fn(zip_code, event_zip), 1)
                 
                 if distance > flag_over:
                     status = "flagged"
@@ -117,15 +124,17 @@ def write_map_output(output_path, teams, team_names, assignment, events, zips,
             
             status_count[status] += 1
             writer.writerow([
-                team_wkt,
-                team["num"],
-                event_code or "",
-                event_wkt,
-                team_names.get(team["num"], ""),
-                zip_code,
-                distance,
-                status,
-                reason
+                team["num"],                        # team_id
+                team_names.get(team["num"], ""),    # team_name
+                zip_code,                           # team_zipCode
+                team_wkt,                           # team_coordinates
+                event_code or "",                   # event_id
+                event_zip,                          # event_zipCode
+                event_wkt,                          # event_coordinates
+                program,                            # program
+                distance,                           # miles or drive_minutes
+                status,                             # status
+                reason                              # flag_reason
             ])
     
     return status_count
@@ -140,10 +149,12 @@ def main():
     # Required inputs
     parser.add_argument("--teams", required=True, help="Teams CSV (number,name,zip)")
     parser.add_argument("--events", required=True, help="Events CSV (code,zip,capacity)")
+    parser.add_argument("--program", required=True, choices=["FLL", "FTC", "FRC"],
+                       help="Competition program (FLL, FTC, or FRC)")
     
     # Optional inputs
-    parser.add_argument("--zips", default=".data/wa_zips.csv",
-                       help="Zip centroids CSV (default: .data/wa_zips.csv)")
+    parser.add_argument("--zips", 
+                       help="Zip centroids CSV (default: .data/wa_zips.csv, falls back to data/wa_zips.csv)")
     parser.add_argument("--drive-matrix", default=".data/drive_matrix.csv",
                        help="Drive matrix CSV (default: .data/drive_matrix.csv)")
     parser.add_argument("--pre-assignments",
@@ -163,7 +174,20 @@ def main():
     
     # Load data
     try:
-        zips = geo.load_zips(args.zips)
+        # Resolve zips path with fallback
+        if args.zips:
+            zips_path = Path(args.zips)
+        else:
+            # Default: try .data/ first, fall back to data/
+            if Path(".data/wa_zips.csv").exists():
+                zips_path = Path(".data/wa_zips.csv")
+            elif Path("data/wa_zips.csv").exists():
+                zips_path = Path("data/wa_zips.csv")
+            else:
+                print("Error: wa_zips.csv not found. Run setup.sh first.", file=sys.stderr)
+                sys.exit(2)
+        
+        zips = geo.load_zips(zips_path)
         events = load_events(args.events)
         teams, team_names = load_teams(args.teams)
         locks = load_pre_assignments(args.pre_assignments)
@@ -205,6 +229,7 @@ def main():
             zips=zips,
             distance_fn=distance_fn,
             mode=mode,
+            program=args.program,
             flag_over=args.flag_over
         )
         

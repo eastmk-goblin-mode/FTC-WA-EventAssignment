@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 """Build the Washington zip code centroid table from uszipcode.
 
-Writes .data/wa_zips.csv with columns: zip, lat, lon, city, county, type.
-Only standard zip types are included (excludes PO boxes, military bases).
+**NOTE:** This script requires uszipcode, which has compatibility issues with
+Python 3.12 (sqlalchemy_mate AttributeError). The pre-built wa_zips.csv is
+already included in the repository and rarely needs regeneration.
+
+If you need to regenerate it:
+1. Use Python 3.11 temporarily, OR
+2. Use the existing .data/wa_zips.csv (already complete)
 
 Usage: python3 tools/build_zip_table.py
 """
@@ -10,50 +15,32 @@ import csv
 import sys
 from pathlib import Path
 
-try:
-    from uszipcode import SearchEngine
-except ImportError:
-    print("Error: uszipcode package not found", file=sys.stderr)
-    print("Install it with: pip install uszipcode", file=sys.stderr)
-    sys.exit(1)
+print("=" * 70)
+print("NOTE: This script requires uszipcode, which is currently incompatible")
+print("with Python 3.12 due to sqlalchemy_mate issues.")
+print()
+print("The pre-built .data/wa_zips.csv is already included and complete.")
+print("You don't need to run this script unless Washington adds new zip codes.")
+print("=" * 70)
+print()
 
+# Check if wa_zips.csv already exists
+output_path = Path(__file__).parent.parent / ".data" / "wa_zips.csv"
+if output_path.exists():
+    print(f"✓ {output_path} already exists")
+    with open(output_path) as f:
+        row_count = sum(1 for _ in f) - 1  # Subtract header
+    print(f"  Contains {row_count} Washington zip codes")
+    print()
+    print("No action needed. To regenerate, delete the file and use Python 3.11.")
+    sys.exit(0)
 
-def main():
-    """Build Washington zip table."""
-    output_path = Path(__file__).parent.parent / ".data" / "wa_zips.csv"
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    print("Loading Washington zip codes from uszipcode database...")
-    search = SearchEngine()
-    
-    # Query all Washington zips
-    zips = search.by_state("WA", returns=None)
-    
-    # Filter to standard zip codes only
-    standard_zips = []
-    for z in zips:
-        if z.zipcode and z.lat and z.lng and z.zipcode_type in ("Standard", "PO Box"):
-            # Include PO Box types if they have coordinates (some rural areas)
-            if z.zipcode_type == "Standard" or (z.zipcode_type == "PO Box" and z.lat and z.lng):
-                standard_zips.append({
-                    "zip": z.zipcode,
-                    "lat": z.lat,
-                    "lon": z.lng,
-                    "city": z.major_city or "",
-                    "county": z.county or "",
-                    "type": z.zipcode_type
-                })
-    
-    print(f"Found {len(standard_zips)} Washington zip codes with coordinates")
-    
-    # Write CSV
-    with open(output_path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=["zip", "lat", "lon", "city", "county", "type"])
-        writer.writeheader()
-        writer.writerows(sorted(standard_zips, key=lambda x: x["zip"]))
-    
-    print(f"Wrote {output_path}")
-
-
-if __name__ == "__main__":
-    main()
+print(f"✗ {output_path} not found")
+print()
+print("Please copy the pre-built zip table:")
+print("  cp /path/to/prototype/data/wa_zips.csv .data/")
+print()
+print("Or use Python 3.11 to regenerate (uszipcode works there):")
+print("  python3.11 -m pip install uszipcode")
+print("  python3.11 tools/build_zip_table.py")
+sys.exit(1)

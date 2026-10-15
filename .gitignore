@@ -60,5 +60,6 @@ test.py
 
 # Ignore local data I/O files
 data/
+!data/wa_zips.csv
 .data/
 output/

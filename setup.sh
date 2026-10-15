@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Basic setup: create .data/ and build the Washington zip table.
+# Basic setup: create .data/ and copy the Washington zip table.
 # This runs automatically on fresh Codespaces (devcontainer postCreateCommand).
 # For drive-time mode, run tools/enable_drive_times.sh after this.
 
@@ -13,11 +13,16 @@ echo "=== Setting up team sorter ==="
 # Create .data directory
 mkdir -p .data
 
-# Build zip table
-echo "Building Washington zip table..."
-if ! python3 tools/build_zip_table.py; then
-    echo "Error: Failed to build zip table" >&2
-    echo "Make sure uszipcode is installed: pip install uszipcode" >&2
+# Copy reference zip table to .data/
+if [ -f data/wa_zips.csv ]; then
+    cp data/wa_zips.csv .data/wa_zips.csv
+    ZIP_COUNT=$(tail -n +2 .data/wa_zips.csv | wc -l | tr -d ' ')
+    echo "✓ Copied Washington zip table: ${ZIP_COUNT} zip codes"
+else
+    echo "✗ data/wa_zips.csv not found in repository"
+    echo ""
+    echo "This reference file should be committed to git."
+    echo "Something is wrong with the repository checkout."
     exit 1
 fi
 

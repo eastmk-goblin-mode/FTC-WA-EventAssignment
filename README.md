@@ -80,7 +80,7 @@ A new zip-bucket greedy assignment algorithm designed for FLL Washington with su
 
 **Straight-line mode (default, works immediately):**
 ```bash
-python3 -m sorter.cli --teams .data/teams.csv --events .data/events.csv
+python3 -m sorter.cli --teams .data/teams.csv --events .data/events.csv --program FLL
 ```
 
 **Drive-time mode (optional, one-time setup):**
@@ -89,10 +89,14 @@ python3 -m sorter.cli --teams .data/teams.csv --events .data/events.csv
 bash tools/enable_drive_times.sh
 
 # Run with drive times
-python3 -m sorter.cli --teams .data/teams.csv --events .data/events.csv
+python3 -m sorter.cli --teams .data/teams.csv --events .data/events.csv --program FLL
 ```
 
 ### Features
+
+- **Program selection (required):**
+  - `--program FLL` / `--program FTC` / `--program FRC`
+  - Sets the program field in output (required for map visualization)
 
 - **Multiple ordering strategies:**
   - `--method bump` (default): Prioritizes teams with limited venue options
@@ -105,7 +109,7 @@ python3 -m sorter.cli --teams .data/teams.csv --events .data/events.csv
 
 - **Pre-assignments:** `--pre-assignments .data/locks.csv` (format: `event_code,team_number`)
 
-- **Map output:** CSV with WKT points for visualization, status flags, and travel distances
+- **Map output:** CSV with standardized columns for visualization, status flags, and travel distances
 
 ### Algorithm
 
@@ -121,8 +125,10 @@ For methodology details and trade-offs, see the algorithm comparison analysis (t
 - `pre-assignments.csv` (optional): `event_code,team_number`
 
 **Output CSV:**
-- Columns: `WKT, team_code, event_location, event_WKT, team_name, zip_code, distance_metric, status, flag_reason`
+- **Required columns (map team):** `team_id, team_name, team_zipCode, team_coordinates, event_id, event_zipCode, event_coordinates, program`
+- **Operational columns:** `miles` (or `drive_minutes`), `status`, `flag_reason`
 - Status: `assigned`, `flagged` (over travel threshold), `unassigned` (no room or unknown zip)
+- Coordinates use WKT format: `POINT (longitude latitude)`
 
 ### Drive-Time Setup
 
@@ -144,7 +150,7 @@ For methodology details and trade-offs, see the algorithm comparison analysis (t
 Basic smoke test:
 ```bash
 # Should complete in <5 seconds
-python3 -m sorter.cli --teams .data/teams.csv --events .data/events.csv --out .data/output.csv
+python3 -m sorter.cli --teams .data/teams.csv --events .data/events.csv --program FLL --out .data/output.csv
 echo "Exit code: $?"
 ```
 
