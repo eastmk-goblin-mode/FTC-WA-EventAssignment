@@ -2,7 +2,7 @@
 
 ## What is GitHub Codespaces?
 
-GitHub Codespaces provides a complete, cloud-based development environment that runs in your browser. No local Python installation required — everything runs in a pre-configured container with all dependencies installed.
+GitHub Codespaces gives you a computer in the cloud that opens in your web browser. Python and everything this project needs are already installed in it, so nothing has to be installed on your own computer. You work in a copy of VS Code, a code editor: a file list on the left, files in the middle, and a terminal at the bottom where you type commands.
 
 ## Quick Start
 
@@ -22,11 +22,11 @@ GitHub Codespaces provides a complete, cloud-based development environment that 
 
 ### 2. Wait for Environment Setup
 
-The codespace will automatically:
-- ✅ Create a Python 3.12 container
-- ✅ Install `osmium-tool` (used only for drive-time mode) and the dependencies in `requirements.txt`
-- ✅ Run `setup.sh`, which creates `.data/` and builds `.data/zips.csv` for the states in `sorter.toml`
-- ✅ Configure git with your GitHub identity
+The first time a codespace starts, it sets itself up automatically:
+- ✅ Starts a machine with Python 3.12
+- ✅ Installs the tools this project uses (`osmium-tool`, needed only for drive times, and the packages in `requirements.txt`)
+- ✅ Runs `setup.sh`, which creates the `.data` folder and a table of zip code locations for the states in `sorter.toml`
+- ✅ Sets up git with your GitHub name, so you can save changes
 
 **Expected setup time:** 1-2 minutes
 
@@ -59,17 +59,18 @@ python3 -m unittest discover -s tests -t .
 
 ### 4. Add Your Input Files
 
-All input and output files go in the `.data/` directory, which `setup.sh` created and git ignores:
+All input and output files go in the `.data` folder, which `setup.sh` created. Git ignores it, so team data is never saved to the repository. To check, run:
 
 ```bash
-# Verify it's git-ignored
-git check-ignore .data  # Should output: .data
+git check-ignore .data  # Should print: .data
 ```
 
-**Place your input files here** (drag and drop into the VS Code file explorer):
-- `.data/teams.csv` — `team_number,team_name,zip_code`, no header row
-- `.data/events.csv` — `event_code,event_zip,capacity`, no header row
-- `.data/pre-assignments.csv` — `event,team_id,is_host_team,notes` (optional; see File Formats in the README. Convert an old `#`-comment file with `python3 tools/convert_pre_assignments.py OLD.csv NEW.csv`)
+**Add your files:** in the file list on the left, right-click `.data`, choose **Upload...**, and pick the files, or drag them from your computer onto the folder. The names must match exactly:
+- `.data/teams.csv`: team number, team name, zip code, and optionally a host mark. No header row.
+- `.data/events.csv`: event code, venue zip code, number of seats. No header row.
+- `.data/pre-assignments.csv` (optional): teams you place by hand, as `event,team_id,is_host_team,notes`. To convert an old file that uses `#` comment lines, run `python3 tools/convert_pre_assignments.py OLD.csv NEW.csv`.
+
+The README's [Your input files](README.md#your-input-files) section has examples of each. If you can't see `.data` when picking files on your own computer, it's hidden because its name starts with a dot; the README's [Finding the hidden `.data` folder](README.md#finding-the-hidden-data-folder-on-your-own-computer) shows how to show it.
 
 **Example file structure:**
 ```
@@ -108,13 +109,13 @@ It reads the program, file names and review thresholds from `sorter.toml`, and p
 ### Step 2: Review the Output
 
 Every input team appears once in `.data/team_assignments.csv`:
-- `event_id` filled, `flagged_for_manual_review` = `false` — placed, nothing to check
-- `event_id` filled, `flagged_for_manual_review` = `true` — placed, but `flagged_reason` lists what to check (small or large zip group, long trip, far from any event)
-- `event_id` empty — not placed; `flagged_reason` starts with `unassigned:` and says why (see the README's "When teams come back unassigned")
+- `event_id` filled, `flagged_for_manual_review` = `false`: placed, nothing to check
+- `event_id` filled, `flagged_for_manual_review` = `true`: placed, but `flagged_reason` lists what to check (small or large zip group, long trip, far from any event)
+- `event_id` empty: not placed. `flagged_reason` starts with `unassigned:` and says why (see the README's [When teams come back unassigned](README.md#when-teams-come-back-unassigned))
 
-The run summary counts the flagged teams under each rule. The thresholds are in the `[review]` section of `sorter.toml`; the README lists their defaults.
+`.data/event_summary.csv` lists each event with how full it is, and flags empty and under-filled events. The summary the sorter prints counts the flagged teams under each rule. The limits are in the `[review]` section of `sorter.toml`; the README's [Reading the results](README.md#reading-the-results) lists the defaults.
 
-The command exits with code 1 when any team is unassigned, so an incomplete run isn't mistaken for a finished one.
+When any team is not placed, the sorter finishes with an error code (1), so an incomplete run isn't mistaken for a finished one.
 
 ### Optional: Review Map
 
@@ -130,9 +131,9 @@ VS Code offers to open the **Review map** port (8765); you can also open it from
 bash tools/enable_drive_times.sh
 ```
 
-This downloads the OpenStreetMap extract for each state in `sorter.toml`, builds a local OSRM routing server, and writes `.data/drive_matrix.csv`. Rerun the sorter afterwards. See the memory note under [Machine Types & Performance](#machine-types--performance) before running it on the default machine.
+This downloads the road map for each state in `sorter.toml`, builds a local route planner (OSRM), and saves the drive times as `.data/drive_matrix.csv`. Run the sorter again afterwards. Read the memory note under [Machine Types & Performance](#machine-types--performance) first: the default machine may not have enough memory.
 
-Kevin's original scripts (`assign_home_leagues.py`, `process_event_preferences.py`) read hardcoded paths under `./data/` and need the `uszipcode` package, which fails on Python 3.12, so they don't run in this codespace.
+Kevin's original scripts (`assign_home_leagues.py`, `process_event_preferences.py`) read fixed file paths under `./data/` and need the `uszipcode` package, which doesn't install on Python 3.12, so they don't run in this codespace. Use the sorter instead.
 
 ## Cost Management & Free Tier
 
@@ -151,8 +152,8 @@ Kevin's original scripts (`assign_home_leagues.py`, `process_event_preferences.p
 ### Cost-Saving Best Practices
 
 1. **Use the default 2-core machine** (automatically selected by the devcontainer config)
-   - Don't manually upgrade to 4-core or 8-core unless you have a specific performance need
-   - The default is sufficient for this project's Python scripts
+   - Don't switch to a 4-core or 8-core machine unless you need to
+   - The default is enough for sorting teams. Building drive times may need a larger machine for a few minutes; see [Machine Types & Performance](#machine-types--performance)
 
 2. **Set an idle timeout:**
    - Go to https://github.com/settings/codespaces
@@ -167,7 +168,7 @@ Kevin's original scripts (`assign_home_leagues.py`, `process_event_preferences.p
 4. **Stop your codespace when done:**
    - Click the codespace name in the bottom-left corner
    - Select "Stop Current Codespace"
-   - Or close the browser tab — it will auto-stop after the idle timeout
+   - Or close the browser tab; it stops on its own after the idle timeout
 
 5. **Monitor your usage:**
    - View current usage: https://github.com/settings/billing/summary
@@ -175,13 +176,13 @@ Kevin's original scripts (`assign_home_leagues.py`, `process_event_preferences.p
 
 ## Machine Types & Performance
 
-This repository's devcontainer configuration defaults to a **2-core/8GB RAM** machine. For sorting teams (CSV processing, straight-line distances, reading a drive matrix), the default machine is sufficient.
+This repository's codespace starts on a **2-core / 8 GB** machine. That is enough for sorting teams.
 
-**Drive-time mode needs more memory to build than to use.** Building the OSRM routing graph peaked at 4.7 GB of RAM for Washington alone and 6.4 GB for Washington plus Oregon (measured on macOS). That leaves little room on an 8 GB machine, and the build may fail. Two ways to handle it:
-- Build `.data/drive_matrix.csv` on a computer with more memory, then upload only that file into `.data/` in the codespace. The sorter reads it the same way, and the codespace stays on the default machine.
-- Switch to a 4-core/16 GB machine for the build, at twice the cost, then switch back.
+**Building drive times needs more memory than using them.** Building the route planner used 4.7 GB of memory for Washington alone and 6.4 GB for Washington plus Oregon, measured on a Mac. In our test on the default 8 GB codespace, the Washington plus Oregon build failed. We haven't confirmed that memory was the cause. Two ways around it:
+- Build `.data/drive_matrix.csv` on a computer with more memory, then upload just that file into `.data` in the codespace. The sorter reads it the same way, and the codespace stays on the default machine.
+- Switch to a 4-core / 16 GB machine for the build, at twice the cost per hour, then switch back. The built route planner is saved, so later rebuilds work on the default machine.
 
-The drive matrix only needs rebuilding when the teams or events change.
+The drive times only need rebuilding when the teams or events change.
 
 **Available machine types:**
 | Cores | RAM | Storage | Cost Multiplier |
@@ -207,7 +208,7 @@ The drive matrix only needs rebuilding when the teams or events change.
 **Symptom:** Stuck on "Creating codespace..." or "Setting up..."
 
 **Solutions:**
-1. Wait 5 minutes — initial setup can be slow
+1. Wait 5 minutes; the first setup can be slow
 2. Check [GitHub Status](https://www.githubstatus.com/) for service outages
 3. Try creating a new codespace (delete the stuck one first)
 4. Check your account's storage/compute limits aren't exceeded
@@ -216,12 +217,12 @@ The drive matrix only needs rebuilding when the teams or events change.
 
 **Symptom:** A message says the codespace is running in recovery mode because of a configuration problem. The creation log ends with `Failed to create container` and `Creating recovery container`.
 
-**What it means:** The container defined in `.devcontainer/devcontainer.json` failed to build, so GitHub started a minimal fallback container instead. None of this repository's setup ran: no Python 3.12 image, no dependencies, no `.data/zips.csv`. The first `ERROR` line in the creation log names the failing step.
+**What it means:** the setup instructions in `.devcontainer/devcontainer.json` failed, so GitHub started a bare fallback machine instead. None of this repository's setup ran: no Python 3.12, no packages, no `.data/zips.csv`. The first `ERROR` line in the creation log names the step that failed.
 
 **Solutions:**
-1. If the fix is already on the branch, pull it inside the recovery codespace:
+1. If the fix is already on GitHub, download it inside the recovery codespace:
    ```bash
-   git pull origin feat/drive-time-sorter
+   git pull
    ```
 2. Rebuild from the updated configuration. Pulling alone does not change the running container:
    - Press `Cmd+Shift+P` / `Ctrl+Shift+P`
@@ -288,10 +289,10 @@ Or configure in your GitHub account settings to apply to all codespaces automati
 ### What's Git-Ignored
 
 The `.gitignore` file prevents these from being committed:
-- `.data/` — Your input/output files (teams, events, assignments, drive matrix)
-- `data/` — Legacy data directory used by Kevin's original scripts
-- `output/` — Generated files
-- `formatted_combined_run/` — Local run output
+- `.data/`: Your input/output files (teams, events, assignments, drive matrix)
+- `data/`: Legacy data directory used by Kevin's original scripts
+- `output/`: Generated files
+- `formatted_combined_run/`: Local run output
 
 **Before committing:**
 ```bash
@@ -299,7 +300,7 @@ The `.gitignore` file prevents these from being committed:
 git status
 
 # Should NOT see .data/ files listed
-# If they appear, they're not being ignored — stop and verify .gitignore
+# If they appear, they're not being ignored: stop and verify .gitignore
 ```
 
 ### Best Practices
