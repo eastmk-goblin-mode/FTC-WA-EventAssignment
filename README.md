@@ -145,16 +145,17 @@ For methodology details and trade-offs, see the algorithm comparison analysis (t
 
 **Privacy:** All routing happens locally. No team data leaves your machine.
 
+### Setup Details
+
+**No additional setup required** - the sorter is ready to run immediately. The Washington zip code database (`data/wa_zips.csv`) is committed to the repository, so straight-line distance mode works out of the box.
+
 ### Testing
 
 Basic smoke test:
 ```bash
-# Should complete in <5 seconds
+# Should complete in <5 seconds, works immediately after clone
 python3 -m sorter.cli --teams .data/teams.csv --events .data/events.csv --program FLL --out .data/output.csv
 echo "Exit code: $?"
 ```
 
-Compatibility test with Kevin's data (requires fixing uszipcode/sqlalchemy_mate version conflict first):
-```bash
-python3 assign_home_leagues.py  # Original script should still work
-```
+Expected: 1-5 unassigned teams (depending on data quality), all others assigned or flagged.

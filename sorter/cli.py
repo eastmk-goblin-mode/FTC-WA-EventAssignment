@@ -158,7 +158,7 @@ def main():
     
     # Optional inputs
     parser.add_argument("--zips", 
-                       help="Zip centroids CSV (default: .data/wa_zips.csv, falls back to data/wa_zips.csv)")
+                       help="Zip centroids CSV (default: .data/wa_zips.csv, falls back to reference/wa_zips.csv)")
     parser.add_argument("--drive-matrix", default=".data/drive_matrix.csv",
                        help="Drive matrix CSV (default: .data/drive_matrix.csv)")
     parser.add_argument("--pre-assignments",
@@ -185,10 +185,10 @@ def main():
             # Default: try .data/ first, fall back to data/
             if Path(".data/wa_zips.csv").exists():
                 zips_path = Path(".data/wa_zips.csv")
-            elif Path("data/wa_zips.csv").exists():
-                zips_path = Path("data/wa_zips.csv")
+            elif Path("reference/wa_zips.csv").exists():
+                zips_path = Path("reference/wa_zips.csv")
             else:
-                print("Error: wa_zips.csv not found. Run setup.sh first.", file=sys.stderr)
+                print("Error: wa_zips.csv not found in .data/ or reference/. Run tools/build_zip_table.py first.", file=sys.stderr)
                 sys.exit(2)
         
         zips = geo.load_zips(zips_path)
