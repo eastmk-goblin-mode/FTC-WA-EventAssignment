@@ -77,29 +77,67 @@ class CliEndToEndTest(unittest.TestCase):
                "--out", d / "out.csv", *extra]
         result = subprocess.run([str(c) for c in cmd], cwd=ROOT, capture_output=True, text=True)
         with open(d / "out.csv") as f:
-            rows = {r["team_id"]: r for r in csv.DictReader(f)}
+            reader = csv.DictReader(f)
+            rows = {r["team_id"]: r for r in reader}
+        self.header = reader.fieldnames
         return result, rows
 
-    def test_drive_mode_reasons_and_rebuild_hint(self):
-        result, rows = self.run_cli("--drive-matrix", self.d / "drive.csv")
+    def test_columns_follow_the_data_dictionary(self):
+        self.run_cli("--drive-matrix", self.d / "drive.csv")
+        self.assertEqual(self.header, [
+            "team_id", "team_name", "team_zipCode", "team_coordinates",
+            "event_id", "event_zipCode", "event_coordinates", "program",
+            "is_host_team", "from_manual_override", "manual_override_notes",
+            "drive_minutes", "drive_distance", "flagged_for_manual_review", "flagged_reason",
+            "straight_line_miles",
+        ])
+
+    def test_drive_mode_unassigned_reasons_and_rebuild_hint(self):
+        result, rows = self.run_cli("--drive-matrix", self.d / "drive.csv", "--small-zip", "0")
         self.assertEqual(result.returncode, 1, result.stderr)
-        self.assertEqual(rows["1"]["status"], "assigned")
-        self.assertEqual(rows["2"]["flag_reason"], "missing drive times; rebuild the drive matrix")
-        self.assertEqual(rows["3"]["flag_reason"], "zip is in ID, which region.env does not include")
-        self.assertEqual(rows["4"]["flag_reason"], "zip code not found")
+        self.assertEqual((rows["1"]["event_id"], rows["1"]["flagged_for_manual_review"]), ("SEA", "false"))
+        self.assertEqual((rows["1"]["drive_minutes"], rows["1"]["drive_distance"]), ("0.0", "0.0"))
+        self.assertEqual(rows["2"]["flagged_reason"], "unassigned: missing drive times; rebuild the drive matrix")
+        self.assertEqual(rows["3"]["flagged_reason"], "unassigned: zip is in ID, which region.env does not include")
+        self.assertEqual(rows["4"]["flagged_reason"], "unassigned: zip code not found")
         # 98402 has a drive time only to TAC (1 seat); the 2-team zip group fits nowhere it
         # can be routed, and the missing 98402->SEA time is the real cause.
-        self.assertEqual(rows["5"]["flag_reason"], "missing drive times; rebuild the drive matrix")
+        self.assertEqual(rows["5"]["flagged_reason"], "unassigned: missing drive times; rebuild the drive matrix")
+        self.assertEqual({rows[t]["flagged_for_manual_review"] for t in "2345"}, {"true"})
         self.assertIn("python3 tools/build_drive_matrix.py", result.stdout)
         self.assertIn("83702", result.stdout)
 
-    def test_straight_line_mode_places_every_in_region_team(self):
+    def test_review_rules_combine_in_flagged_reason(self):
         write_csv(self.d / "events.csv", [("SEA", "98101", 10), ("TAC", "98402", 10)])
         result, rows = self.run_cli("--drive-matrix", self.d / "missing.csv")
-        self.assertEqual(rows["2"]["status"], "flagged")  # Portland is over 90 miles from both events
-        self.assertEqual({rows[t]["status"] for t in ("1", "5", "6")}, {"assigned"})
-        self.assertEqual(rows["3"]["status"], "unassigned")
-        self.assertEqual(rows["4"]["status"], "unassigned")
+        portland = rows["2"]
+        self.assertEqual(portland["flagged_for_manual_review"], "true")
+        self.assertEqual(portland["drive_minutes"], "")  # straight-line run: no drive figures
+        reasons = portland["flagged_reason"].split("; ")
+        self.assertEqual([r.split(" (")[0] for r in reasons], [
+            "3 or fewer teams in zip",
+            "assigned event over 40 straight-line miles",
+            "nearest event over 75 straight-line miles",
+            "travel over 90 straight-line miles",
+        ])
+        self.assertEqual(float(portland["straight_line_miles"]), float(reasons[1].split("(")[1].rstrip(")")))
+        self.assertIn("Flagged for manual review", result.stdout)
+
+    def test_manual_override_columns(self):
+        write_csv(self.d / "events.csv", [("SEA", "98101", 10), ("TAC", "98402", 10)])
+        (self.d / "pre.csv").write_text("#pre TAC\nTAC,5,Coach asked to stay south\nSEA,6\n")
+        _, rows = self.run_cli("--drive-matrix", self.d / "missing.csv", "--pre-assignments", self.d / "pre.csv")
+        self.assertEqual((rows["5"]["event_id"], rows["5"]["from_manual_override"],
+                          rows["5"]["manual_override_notes"]), ("TAC", "true", "Coach asked to stay south"))
+        self.assertEqual((rows["6"]["event_id"], rows["6"]["from_manual_override"],
+                          rows["6"]["manual_override_notes"]), ("SEA", "true", ""))
+        self.assertEqual(rows["1"]["from_manual_override"], "false")
+
+    def test_host_team_column_becomes_a_boolean(self):
+        write_csv(self.d / "teams.csv", [("1", "Near", "98101", "yes"), ("5", "Tacoma A", "98402", ""),
+                                         ("6", "Tacoma B", "98402", "no")])
+        _, rows = self.run_cli("--drive-matrix", self.d / "drive.csv")
+        self.assertEqual({t: rows[t]["is_host_team"] for t in rows}, {"1": "true", "5": "false", "6": "false"})
 
     def test_every_input_team_is_in_the_output(self):
         _, rows = self.run_cli("--drive-matrix", self.d / "drive.csv")

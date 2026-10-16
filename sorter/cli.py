@@ -6,7 +6,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from . import geo, assign
+from . import geo, assign, review
 
 
 def load_events(path):
@@ -45,15 +45,15 @@ def load_teams(path):
 
 
 def load_pre_assignments(path):
-    """Load pre-assignments from CSV: league_name, team_number.
+    """Load pre-assignments from CSV: event_code, team_number[, notes].
     
-    Returns {team_number: event_code}. Lines starting with # are comments.
+    Returns ({team_number: event_code}, {team_number: notes}). Lines starting with # are comments.
     """
     if not path or not Path(path).exists():
-        return {}
+        return {}, {}
     
-    locks = {}
-    with open(path) as f:
+    locks, notes = {}, {}
+    with open(path, encoding="utf-8-sig") as f:
         reader = csv.reader(f)
         for row in reader:
             if not row or not row[0] or row[0].startswith("#"):
@@ -61,7 +61,9 @@ def load_pre_assignments(path):
             if len(row) >= 2:
                 event_code, team_num = row[0].strip(), row[1].strip()
                 locks[team_num] = event_code
-    return locks
+                if len(row) > 2 and row[2].strip():
+                    notes[team_num] = ",".join(row[2:]).strip()
+    return locks, notes
 
 
 def unassigned_reason(zip_code, zips, zip_states, region, mode, missing_drive_time):
@@ -80,20 +82,34 @@ def unassigned_reason(zip_code, zips, zip_states, region, mode, missing_drive_ti
     return "no event with room"
 
 
+OUTPUT_COLUMNS = [
+    # Required by the map team
+    "team_id", "team_name", "team_zipCode", "team_coordinates",
+    "event_id", "event_zipCode", "event_coordinates", "program",
+    # Sorting team columns (the map team ignores these)
+    "is_host_team", "from_manual_override", "manual_override_notes",
+    "drive_minutes", "drive_distance", "flagged_for_manual_review", "flagged_reason",
+    "straight_line_miles",
+]
+
+
 def write_map_output(output_path, teams, team_names, team_host, assignment, events, zips,
-                     distance_fn, mode, program, flag_over=90, zip_states=None, region=()):
-    """Write the map file for visualization.
-    
-    Required columns (map team):
-      team_id, team_name, team_zipCode, team_coordinates, event_id, 
-      event_zipCode, event_coordinates, program
-    
-    Additional columns (operational):
-      host_team, miles/drive_minutes, status, flag_reason
+                     distance_fn, mode, program, rules, miles_fn, overrides=None, override_notes=None,
+                     zip_states=None, region=()):
+    """Write one row per input team, in OUTPUT_COLUMNS order.
+
+    distance_fn is the travel cost the sorter used (drive minutes, or straight-line miles);
+    miles_fn gives the distance in miles for the same route (drive miles, or straight-line).
+    Returns (counts, unassigned_zips, reason_counts).
     """
     event_zips = {e["code"]: e["zip"] for e in events}
-    status_count = Counter()
+    overrides = overrides or {}
+    override_notes = override_notes or {}
+    zip_counts = Counter(t["zip"] for t in teams)
+    unit = "drive" if mode == "drive" else "straight-line"
+    counts = Counter()
     unassigned_zips = {}  # reason -> set of zips
+    reason_counts = Counter()
     
     def wkt(zip_code):
         """Return WKT POINT string for a zip centroid."""
@@ -101,65 +117,69 @@ def write_map_output(output_path, teams, team_names, team_host, assignment, even
             return ""
         lat, lon = zips[zip_code][:2]
         return f"POINT ({lon} {lat})"
+
+    def finite(value):
+        return round(value, 1) if value is not None and math.isfinite(value) else None
+
+    def blank(value):
+        return "" if value is None else value
+
+    def boolean(value):
+        return "true" if value else "false"
     
     with open(output_path, "w", newline="") as f:
         writer = csv.writer(f, quoting=csv.QUOTE_MINIMAL)
+        writer.writerow(OUTPUT_COLUMNS)
         
-        # Header - required columns first, then operational columns
-        distance_col = "drive_minutes" if mode == "drive" else "miles"
-        writer.writerow([
-            "team_id", "team_name", "team_zipCode", "team_coordinates",
-            "event_id", "event_zipCode", "event_coordinates", "program",
-            "host_team", distance_col, "status", "flag_reason"
-        ])
-        
-        # Rows
         for team in teams:
             zip_code = team["zip"]
             event_code = assignment.get(team["num"])
-            team_wkt = wkt(zip_code)
+            reachable = [miles_fn(zip_code, e["zip"]) for e in events]
+            nearest_miles = finite(min((m for m in reachable if math.isfinite(m)), default=None))
             
             if not event_code:
-                # Unassigned
-                event_zip = ""
-                event_wkt = ""
-                distance = ""
-                status = "unassigned"
+                event_zip = event_wkt = ""
+                travel = assigned_miles = None
                 missing_drive_time = any(not math.isfinite(distance_fn(zip_code, e["zip"])) for e in events)
-                reason = unassigned_reason(zip_code, zips, zip_states or {}, set(region), mode,
-                                           missing_drive_time)
+                why = unassigned_reason(zip_code, zips, zip_states or {}, set(region), mode,
+                                        missing_drive_time)
+                unassigned_zips.setdefault(why, set()).add(zip_code)
+                counts["unassigned"] += 1
             else:
-                # Assigned
                 event_zip = event_zips[event_code]
                 event_wkt = wkt(event_zip)
-                distance = round(distance_fn(zip_code, event_zip), 1)
-                
-                if distance > flag_over:
-                    status = "flagged"
-                    reason = f"travel over {flag_over} {distance_col.replace('_', ' ')}"
-                else:
-                    status = "assigned"
-                    reason = ""
-            
-            status_count[status] += 1
-            if status == "unassigned":
-                unassigned_zips.setdefault(reason, set()).add(zip_code)
+                travel = finite(distance_fn(zip_code, event_zip))
+                assigned_miles = finite(miles_fn(zip_code, event_zip))
+                why = None
+
+            reasons = review.review_reasons(zip_counts[zip_code], assigned_miles, nearest_miles, travel,
+                                            why, unit, rules)
+            if event_code:
+                counts["flagged" if reasons else "assigned"] += 1
+            for r in reasons:
+                reason_counts[r.split(" (")[0]] += 1
+            straight = finite(geo.miles_straight_line(zip_code, event_zip, zips)) if event_code else None
+
             writer.writerow([
-                team["num"],                        # team_id
-                team_names.get(team["num"], ""),    # team_name
-                zip_code,                           # team_zipCode
-                team_wkt,                           # team_coordinates
-                event_code or "",                   # event_id
-                event_zip,                          # event_zipCode
-                event_wkt,                          # event_coordinates
-                program,                            # program
-                team_host.get(team["num"], ""),     # host_team
-                distance,                           # miles or drive_minutes
-                status,                             # status
-                reason                              # flag_reason
+                team["num"],
+                team_names.get(team["num"], ""),
+                zip_code,
+                wkt(zip_code),
+                event_code or "",
+                event_zip,
+                event_wkt,
+                program,
+                boolean(review.truthy(team_host.get(team["num"], ""))),
+                boolean(team["num"] in overrides),
+                override_notes.get(team["num"], ""),
+                blank(travel) if mode == "drive" else "",
+                blank(assigned_miles) if mode == "drive" else "",
+                boolean(reasons),
+                "; ".join(reasons),
+                blank(straight),
             ])
     
-    return status_count, unassigned_zips
+    return counts, unassigned_zips, reason_counts
 
 
 def main():
@@ -192,7 +212,15 @@ def main():
     parser.add_argument("--method", choices=["bump", "largest", "regret"], default="bump",
                        help="Ordering strategy (default: bump)")
     parser.add_argument("--flag-over", type=float, default=90,
-                       help="Flag assignments over this travel threshold (default: 90)")
+                       help="Flag travel over this: drive minutes, or straight-line miles without a matrix (default: 90)")
+    parser.add_argument("--flag-miles", type=float, default=40,
+                       help="Flag teams whose assigned event is farther than this many miles (default: 40)")
+    parser.add_argument("--flag-nearest-miles", type=float, default=75,
+                       help="Flag teams whose nearest event is farther than this many miles (default: 75)")
+    parser.add_argument("--small-zip", type=int, default=3,
+                       help="Flag zips with this many teams or fewer (default: 3)")
+    parser.add_argument("--large-zip", type=int, default=30,
+                       help="Flag zips with this many teams or more (default: 30)")
     
     args = parser.parse_args()
     
@@ -218,18 +246,24 @@ def main():
         region = geo.table_states(zips_path) or {"WA"}  # reference/wa_zips.csv has no state column
         events = load_events(args.events)
         teams, team_names, team_host = load_teams(args.teams)
-        locks = load_pre_assignments(args.pre_assignments)
+        locks, override_notes = load_pre_assignments(args.pre_assignments)
+        rules = review.Rules(small_zip=args.small_zip, large_zip=args.large_zip,
+                             assigned_miles=args.flag_miles, nearest_miles=args.flag_nearest_miles,
+                             travel=args.flag_over)
         
         # Determine distance function
         drive_matrix_path = Path(args.drive_matrix)
         if drive_matrix_path.exists():
             print(f"Using drive times from {args.drive_matrix}")
             drive_matrix = geo.load_drive_matrix(args.drive_matrix)
+            miles_matrix = geo.load_drive_miles(args.drive_matrix)
             distance_fn = lambda a, b: geo.drive_minutes(a, b, drive_matrix)
+            miles_fn = lambda a, b: geo.drive_miles(a, b, drive_matrix, miles_matrix)
             mode = "drive"
         else:
             print(f"Drive matrix not found at {args.drive_matrix}, using straight-line miles")
             distance_fn = lambda a, b: geo.miles_straight_line(a, b, zips)
+            miles_fn = distance_fn
             mode = "miles"
         
         # Run assignment
@@ -248,7 +282,7 @@ def main():
         
         # Write output
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-        status_count, unassigned_zips = write_map_output(
+        status_count, unassigned_zips, reason_counts = write_map_output(
             output_path=args.out,
             teams=teams,
             team_names=team_names,
@@ -259,7 +293,10 @@ def main():
             distance_fn=distance_fn,
             mode=mode,
             program=args.program,
-            flag_over=args.flag_over,
+            rules=rules,
+            miles_fn=miles_fn,
+            overrides=locks,
+            override_notes=override_notes,
             zip_states=zip_states,
             region=region
         )
@@ -268,6 +305,10 @@ def main():
         print(f"\nResults: {sum(status_count.values())} teams")
         for status, count in sorted(status_count.items()):
             print(f"  {status}: {count}")
+        if reason_counts:
+            print("\nFlagged for manual review, by reason (teams):")
+            for reason, count in reason_counts.most_common():
+                print(f"  {reason}: {count}")
         if unassigned_zips:
             print("\nUnassigned, by reason (zips):")
             for reason, zip_set in sorted(unassigned_zips.items()):
