@@ -11,11 +11,15 @@
     "memory": "8gb",
     "storage": "32gb"
   },
-  "forwardPorts": [5055],
+  "forwardPorts": [5055, 8765],
   "portsAttributes": {
     "5055": {
       "label": "OSRM (optional routing)",
       "onAutoForward": "silent"
+    },
+    "8765": {
+      "label": "Review map",
+      "onAutoForward": "notify"
     }
   },
   "postCreateCommand": "sudo apt-get update -qq && sudo apt-get install -y -qq osmium-tool && pip install -r requirements.txt && bash setup.sh",

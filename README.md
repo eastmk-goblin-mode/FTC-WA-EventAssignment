@@ -172,6 +172,23 @@ Locations come from each zip's centre point. In a large zip that centre can land
 
 The repository ships with this one: the 98027 centre sits in Tiger Mountain State Forest and snapped to a gravel forest road, adding 50-60 minutes to every drive there. After adding or changing an override, rerun `bash setup.sh` (it prints each override it applied), then rebuild the drive matrix with `bash tools/enable_drive_times.sh`. A sign that a zip needs one: drives into it are much slower than drives into other venues, or many teams are flagged "looks closer on the map" toward the same event.
 
+### Review map
+
+`tools/make_map.py` turns the sorter's output into a one-page map for reviewing flags before handing off:
+
+```bash
+python3 -m sorter.cli
+python3 tools/make_map.py --serve      # then open http://127.0.0.1:8765/map.html
+```
+
+- Each team is a dot colored by its event; flagged teams have a red outline and a dashed line to their event. Click a team for its event, drive time and flag reasons; event names in the popup are links that jump to that event's pin.
+- The card on the right explains each review rule with its threshold and count, filters the map by rule, and lists the events with empty or under-filled ones first.
+- Teams whose zip could not be located are listed in a card at the bottom left.
+
+`--serve` writes `.data/map.html` and serves it on `127.0.0.1:8765` until Ctrl+C. The page has to come from a web server: opened as a file, OpenStreetMap blocks the map tiles because no HTTP Referer is sent. In a Codespace, open the forwarded **Review map** port from the Ports tab and keep its visibility **Private**. The page loads Leaflet (pinned by hash) and OpenStreetMap tiles; those servers see which area is viewed, not team data.
+
+The map contains team names, which is why it is written to `.data/`. Do not commit or share it publicly.
+
 ### When teams come back unassigned
 
 Each unassigned team's `flagged_reason` starts with `unassigned:` and one of these causes, and the run summary lists the zips under each:

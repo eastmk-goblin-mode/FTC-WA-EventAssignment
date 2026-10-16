@@ -116,6 +116,14 @@ The run summary counts the flagged teams under each rule. The thresholds are in 
 
 The command exits with code 1 when any team is unassigned, so an incomplete run isn't mistaken for a finished one.
 
+### Optional: Review Map
+
+```bash
+python3 tools/make_map.py --serve
+```
+
+VS Code offers to open the **Review map** port (8765); you can also open it from the Ports tab. Leave the port's visibility at **Private**: the map lists team names, and Private means only you, signed in to GitHub, can open it. Press Ctrl+C in the terminal to stop the server. See the README's "Review map" section for what the map shows.
+
 ### Optional: Drive Times
 
 ```bash
