@@ -14,12 +14,12 @@ echo "=== Setting up team sorter ==="
 mkdir -p .data
 
 # Copy reference zip table to .data/
-if [ -f data/wa_zips.csv ]; then
-    cp data/wa_zips.csv .data/wa_zips.csv
+if [ -f reference/wa_zips.csv ]; then
+    cp reference/wa_zips.csv .data/wa_zips.csv
     ZIP_COUNT=$(tail -n +2 .data/wa_zips.csv | wc -l | tr -d ' ')
     echo "✓ Copied Washington zip table: ${ZIP_COUNT} zip codes"
 else
-    echo "✗ data/wa_zips.csv not found in repository"
+    echo "✗ reference/wa_zips.csv not found in repository"
     echo ""
     echo "This reference file should be committed to git."
     echo "Something is wrong with the repository checkout."

@@ -16,6 +16,6 @@
       "onAutoForward": "silent"
     }
   },
-  "postCreateCommand": "pip install -r requirements.txt",
+  "postCreateCommand": "pip install -r requirements.txt && bash setup.sh",
   "waitFor": "postCreateCommand"
 }
