@@ -19,23 +19,16 @@ Launch a pre-configured development environment directly in your browser:
    - Click **Create codespace on main** (or your working branch)
 
 2. **Wait for setup to complete:**
-   - The codespace will automatically install Python 3.12 and all dependencies
+   - The codespace installs Python 3.12 and the dependencies, then runs `setup.sh`, which creates `.data/` and builds the zip table
    - Setup typically takes 1-2 minutes
    - You'll see "Running postCreateCommand..." in the terminal
 
-3. **Set up your data directory:**
-   ```bash
-   mkdir -p .data
-   # Place your input files (teams, leagues, preferences) in .data/
-   ```
+3. **Add your input files to `.data/`** (git-ignored, so team data never reaches the repository):
+   - `.data/teams.csv` and `.data/events.csv`, in the formats under [File Formats](#file-formats)
 
-4. **Run the assignment workflow:**
+4. **Run the sorter:**
    ```bash
-   # Example: Assign teams to home leagues
-   python assign_home_leagues.py --teams .data/teams.csv --leagues .data/leagues.csv
-   
-   # Process event preferences
-   python process_event_preferences.py --preferences .data/preferences.csv
+   python3 -m sorter.cli --program FLL --teams .data/teams.csv --events .data/events.csv
    ```
 
 **Cost management:**
@@ -64,6 +57,13 @@ For detailed Codespaces setup and troubleshooting, see [CODESPACES.md](CODESPACE
    uv pip install -r requirements.txt setuptools
    ```
 
+4. Create `.data/` and build the zip table:
+   ```bash
+   bash setup.sh
+   ```
+
+Kevin's original scripts (`assign_home_leagues.py`, `process_event_preferences.py`) read hardcoded paths under `./data/` and need the `uszipcode` package, which `requirements.txt` leaves out because it fails on Python 3.12. The `sorter/` package below replaces them.
+
 ## Assignment Methodology
 
 1. Given a list of leagues and teams, assign teams to leagues based solely on event proximity. The goal here is to determine an optimal set of "Home League" assignments to reduce the overall travel requirements we ask of teams. At least on the initial pass it's unlikely that this will consider inter-team relationships or impassable boundaries (asking teams to drive over water), so manual adjustments may be required. In the given output all teams must have a home-league assignment.
@@ -74,7 +74,7 @@ In addition to the above functionality, there will likely be a script to ensure 
 
 ## Drive-Time Sorter (FLL)
 
-A new zip-bucket greedy assignment algorithm designed for FLL Washington with support for drive-time routing. Located in the `sorter/` package.
+A zip-bucket greedy assignment algorithm for FLL with support for drive-time routing, covering the states listed in `region.env` (Washington and Oregon by default). Located in the `sorter/` package.
 
 ### Quick Start
 
@@ -107,7 +107,7 @@ python3 -m sorter.cli --teams .data/teams.csv --events .data/events.csv --progra
   - Straight-line miles (no setup required)
   - OSRM drive minutes with ferry handling (opt-in via `enable_drive_times.sh`)
 
-- **Pre-assignments:** `--pre-assignments .data/locks.csv` (format: `event_code,team_number`)
+- **Pre-assignments:** `--pre-assignments .data/pre-assignments.csv` (format: `event_code,team_number`)
 
 - **Map output:** CSV with standardized columns for visualization, status flags, and travel distances
 
@@ -134,28 +134,50 @@ For methodology details and trade-offs, see the algorithm comparison analysis (t
 
 **Requirements for OSRM routing:**
 - Docker (Linux/Codespaces) or Homebrew osrm-backend (macOS)
-- ~2GB disk for Washington state map data
-- ~5GB RAM (4-core/16GB Codespace recommended, 2-core works but slower)
+- `osmium-tool` to merge state maps when `region.env` lists more than one state (installed by the devcontainer)
+- About 2 GB of disk per state for map data and the routing graph
+- RAM: the graph build peaked at 4.7 GB for Washington alone, and more states need more. A 2-core/8 GB Codespace is borderline; see `CODESPACES.md` before choosing a larger machine, which costs more.
 
 **What happens:**
-1. Downloads OpenStreetMap Washington extract (365MB)
-2. Builds routing graph (~3-5 minutes)
-3. Starts local OSRM server on port 5055
-4. Pre-computes drive matrix for all team×event pairs
+1. Downloads the OpenStreetMap extract for each state in `region.env` from Geofabrik (WA about 350 MB, OR about 240 MB)
+2. Merges them into one map so routes that cross a state line exist
+3. Builds the routing graph and starts a local OSRM server on port 5055
+4. Pre-computes the drive matrix for every team zip × event zip in `.data/teams.csv` and `.data/events.csv`
 
 **Privacy:** All routing happens locally. No team data leaves your machine.
 
+### Region (which states are covered)
+
+`region.env` holds one setting, `STATES=WA,OR`. It controls both the zip table and the road map, so they always cover the same states. To add a state (for example Idaho), set `STATES=WA,OR,ID`, then rerun `bash setup.sh` and, for drive times, `bash tools/enable_drive_times.sh`.
+
+### When teams come back unassigned
+
+Each unassigned team gets a `flag_reason`, and the run summary lists the zips under each reason:
+
+| `flag_reason` | Cause | Fix |
+|---|---|---|
+| `zip is in ID, which region.env does not include` | The zip is real but outside the configured states | Add the state to `region.env`, rerun setup |
+| `zip code not found` | The zip is not in the US zip database | Check the team's zip for a typo |
+| `missing drive times; rebuild the drive matrix` | The drive matrix was built from different team or event files | Start OSRM (`bash tools/osrm_setup.sh`), then run the `build_drive_matrix.py` command the sorter prints |
+| `no event with room` | Every reachable event is full | Add capacity or place the team by hand |
+
+The drive matrix only holds the zip pairs from the files it was built from. Rebuild it whenever the teams or events change; the map download and graph build are cached, so a rebuild takes seconds once OSRM is running.
+
 ### Setup Details
 
-**No additional setup required** - the sorter is ready to run immediately. The Washington zip code database (`data/wa_zips.csv`) is committed to the repository, so straight-line distance mode works out of the box.
+`setup.sh` (run automatically in Codespaces) builds `.data/zips.csv` for the states in `region.env` with `tools/build_zip_table.py`. It downloads a 10.7 MB public zip database (US Census/USPS centroids) once and checks its SHA-256. Without network access, setup falls back to the committed `reference/wa_zips.csv`, which covers Washington only.
 
 ### Testing
 
-Basic smoke test:
 ```bash
-# Should complete in <5 seconds, works immediately after clone
-python3 -m sorter.cli --teams .data/teams.csv --events .data/events.csv --program FLL --out .data/output.csv
-echo "Exit code: $?"
+python3 -m unittest discover -s tests -t .
 ```
 
-Expected: 1-5 unassigned teams (depending on data quality), all others assigned or flagged.
+The tests use only the standard library. One test compares a fresh Washington export with `reference/wa_zips.csv`; it is skipped until the zip database has been downloaded by `setup.sh`.
+
+Smoke test on your own data:
+```bash
+python3 -m sorter.cli --program FLL --teams .data/teams.csv --events .data/events.csv --out .data/output.csv
+```
+
+Every input team appears in the output as `assigned`, `flagged` (over the travel threshold), or `unassigned` with a reason. The command exits 1 when any team is unassigned, so the run is not mistaken for complete.

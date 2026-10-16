@@ -63,3 +63,6 @@ test.py
 data/
 !data/.gitkeep
 output/
+
+# Local run outputs (may hold team data)
+formatted_combined_run/
