@@ -57,10 +57,12 @@ For detailed Codespaces setup and troubleshooting, see [CODESPACES.md](CODESPACE
    uv pip install -r requirements.txt setuptools
    ```
 
-4. Create `.data/` and build the zip table:
+4. Run setup file:
    ```bash
    bash setup.sh
    ```
+5. Above step will generate a folder called .data where we will store input/output files. Notes: by default computer will hide files and folders that start with a dot. For mac, Press (Command + Shift + .) then hidden .data folder will instantly appear. For windows, Open File Explorer -> Click View in the top menu bar -> Hover over Show, then click and check Hidden items then hidden .data folder will instantly appear
+6. For input files, we just used what were given
 
 Kevin's original scripts (`assign_home_leagues.py`, `process_event_preferences.py`) read hardcoded paths under `./data/` and need the `uszipcode` package, which `requirements.txt` leaves out because it fails on Python 3.12. The `sorter/` package below replaces them.
 
@@ -78,9 +80,9 @@ A zip-bucket greedy assignment algorithm for FLL with support for drive-time rou
 
 ### Quick Start
 
-1. Put `teams.csv` and `events.csv` (and optionally `pre-assignments.csv`) in `.data/`.
-2. Check the settings in `sorter.toml`: the program, the file names, and the review thresholds. Every setting has a comment.
-3. Run:
+1. Put `teams.csv` and `events.csv` (and optionally `pre-assignments.csv`) in `.data/`. Notes: please make sure file names match exactly as `teams.csv` and `events.csv` and optionally `pre-assignments.csv` 
+3. Check the settings in `sorter.toml`: the program, the file names, and the review thresholds. Every setting has a comment.
+4. Run:
    ```bash
    python3 -m sorter.cli
    ```
