@@ -21,13 +21,14 @@ import csv
 import hashlib
 import sqlite3
 import sys
+import tomllib
 import urllib.request
 from pathlib import Path
 
 if __package__:
-    from .region import parse_states, region_states
+    from .region import CONFIG_FILE, parse_states, region_states
 else:
-    from region import parse_states, region_states
+    from region import CONFIG_FILE, parse_states, region_states
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / ".data"
@@ -59,7 +60,30 @@ def fetch_db(dest=DB_CACHE):
     return dest
 
 
-def export(db_path, states, out_dir=DATA_DIR):
+def load_overrides(path=CONFIG_FILE):
+    """The [zip_overrides] section of sorter.toml as {zip: (lat, lon)}. Stops on a malformed entry.
+
+    Each entry replaces a zip's centre point, e.g.
+        "98027" = { lat = 47.5221, lon = -122.0280, note = "Issaquah High School" }
+    """
+    try:
+        with open(path, "rb") as f:
+            section = tomllib.load(f).get("zip_overrides", {})
+    except (OSError, tomllib.TOMLDecodeError) as e:
+        raise SystemExit(f"Cannot read {path}: {e}")
+    overrides = {}
+    for z, entry in section.items():
+        if not (isinstance(entry, dict) and len(z) == 5 and z.isdigit()):
+            raise SystemExit(f"{path}: zip_overrides.{z} must be a 5-digit zip with {{ lat = ..., lon = ... }}")
+        lat, lon = entry.get("lat"), entry.get("lon")
+        if not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in (lat, lon)) \
+                or not (-90 <= lat <= 90 and -180 <= lon <= 180):
+            raise SystemExit(f"{path}: zip_overrides.{z} needs numeric lat and lon")
+        overrides[z] = (float(lat), float(lon))
+    return overrides
+
+
+def export(db_path, states, out_dir=DATA_DIR, overrides=None):
     out_dir.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     try:
@@ -77,6 +101,10 @@ def export(db_path, states, out_dir=DATA_DIR):
     missing = [s for s in states if s not in found]
     if missing:
         raise SystemExit(f"No zips found for {', '.join(missing)}. Check states in sorter.toml.")
+
+    overrides = overrides or {}
+    rows = [(z, *overrides[z], *rest) if z in overrides else (z, lat, lon, *rest)
+            for z, lat, lon, *rest in rows]
 
     with open(out_dir / "zips.csv", "w", newline="") as f:
         w = csv.writer(f)
@@ -100,9 +128,11 @@ def main():
         db = a.db or fetch_db()
     except OSError as e:
         sys.exit(f"Could not download the zip database: {e}")
-    counts = export(db, states)
+    counts = export(db, states, overrides=load_overrides())
     detail = ", ".join(f"{s} {n}" for s, n in counts.items())
     print(f"Wrote .data/zips.csv: {sum(counts.values())} zips ({detail}).")
+    for z, (lat, lon) in load_overrides().items():
+        print(f"  zip {z} centre replaced with {lat}, {lon} (zip_overrides in sorter.toml)")
 
 
 if __name__ == "__main__":

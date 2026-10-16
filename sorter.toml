@@ -31,3 +31,9 @@ nearest_miles  = 75        # nearest event farther than this
 travel_minutes = 90        # travel over this (straight-line miles when there is no drive matrix)
 looks_closer_minutes = 30  # an event nearer as the crow flies is at least this much longer by road
                            # (water or mountains in the way); needs a drive matrix
+
+# Replace a zip's centre point when it routes badly, e.g. when it lands in a forest or on
+# water. Applied by setup.sh when it builds .data/zips.csv; afterwards rerun setup.sh and
+# rebuild the drive matrix (bash tools/enable_drive_times.sh). Coordinates are public places.
+[zip_overrides]
+"98027" = { lat = 47.5221, lon = -122.0280, note = "Issaquah High School. The zip centre is in Tiger Mountain State Forest and snaps to a gravel forest road, adding 50-60 minutes to every drive." }

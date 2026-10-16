@@ -47,6 +47,37 @@ class BuildZipTableTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             bzt.export(self.db, ["WA", "ZZ"], self.tmp / "out")
 
+    def test_overrides_replace_a_zip_centre(self):
+        bzt.export(self.db, ["WA", "OR"], self.tmp / "out", {"98101": (47.6, -122.3)})
+        row = {r["zip"]: r for r in self.read("zips.csv")}["98101"]
+        self.assertEqual((row["lat"], row["lon"]), ("47.6", "-122.3"))
+        self.assertEqual(row["city"], "Seattle")  # everything but the point is kept
+
+    def test_override_for_a_zip_outside_the_region_is_ignored(self):
+        bzt.export(self.db, ["WA"], self.tmp / "out", {"83702": (43.6, -116.2)})
+        self.assertNotIn("83702", {r["zip"] for r in self.read("zips.csv")})
+
+    def toml(self, text):
+        path = self.tmp / "sorter.toml"
+        path.write_text(text)
+        return path
+
+    def test_overrides_are_read_from_sorter_toml(self):
+        path = self.toml('[zip_overrides]\n"98101" = { lat = 47.6, lon = -122.3, note = "downtown" }\n')
+        self.assertEqual(bzt.load_overrides(path), {"98101": (47.6, -122.3)})
+        self.assertEqual(bzt.load_overrides(self.toml('program = "FLL"\n')), {})
+
+    def test_bad_override_entries_stop(self):
+        for bad in ('"98101" = { lat = "north", lon = -122.3 }', '"98101" = { lat = 47.6 }',
+                    '"9810" = { lat = 47.6, lon = -122.3 }', '"98101" = { lat = 95.0, lon = -122.3 }'):
+            with self.subTest(bad=bad), self.assertRaises(SystemExit):
+                bzt.load_overrides(self.toml(f"[zip_overrides]\n{bad}\n"))
+
+    def test_committed_override_for_98027(self):
+        lat, lon = bzt.load_overrides()["98027"]
+        self.assertAlmostEqual(lat, 47.52, places=2)
+        self.assertAlmostEqual(lon, -122.03, places=2)
+
 
 @unittest.skipUnless(bzt.DB_CACHE.exists(), "zip database not downloaded")
 class RealDatabaseTest(unittest.TestCase):

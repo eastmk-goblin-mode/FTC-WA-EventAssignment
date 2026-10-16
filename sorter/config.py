@@ -42,6 +42,7 @@ KEYS = {
     ("review", "looks_closer_minutes"): ("flag_looks_closer", (int, float)),
 }
 SECTIONS = {s for s, _ in KEYS if s}
+OTHER_SECTIONS = {"zip_overrides"}  # read by tools/build_zip_table.py, which validates its entries
 
 
 class ConfigError(Exception):
@@ -58,6 +59,10 @@ def read(path):
 
     settings = {}
     for name, value in data.items():
+        if name in OTHER_SECTIONS:
+            if not isinstance(value, dict):
+                raise ConfigError(f"{path}: [{name}] must be a section")
+            continue
         if name in SECTIONS:
             if not isinstance(value, dict):
                 raise ConfigError(f"{path}: [{name}] must be a section")
