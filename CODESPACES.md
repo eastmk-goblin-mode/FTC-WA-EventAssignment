@@ -204,6 +204,28 @@ The drive matrix only needs rebuilding when the teams or events change.
 3. Try creating a new codespace (delete the stuck one first)
 4. Check your account's storage/compute limits aren't exceeded
 
+### Codespace Opens in Recovery Mode
+
+**Symptom:** A message says the codespace is running in recovery mode because of a configuration problem. The creation log ends with `Failed to create container` and `Creating recovery container`.
+
+**What it means:** The container defined in `.devcontainer/devcontainer.json` failed to build, so GitHub started a minimal fallback container instead. None of this repository's setup ran: no Python 3.12 image, no dependencies, no `.data/zips.csv`. The first `ERROR` line in the creation log names the failing step.
+
+**Solutions:**
+1. If the fix is already on the branch, pull it inside the recovery codespace:
+   ```bash
+   git pull origin feat/drive-time-sorter
+   ```
+2. Rebuild from the updated configuration. Pulling alone does not change the running container:
+   - Press `Cmd+Shift+P` / `Ctrl+Shift+P`
+   - Type "Rebuild" and select **Codespaces: Rebuild Container**
+   - Choose **Full Rebuild** in the confirmation dialog. The codespace restarts and runs the full setup again
+   - From a terminal outside the codespace, `gh codespace rebuild --full` does the same
+3. If the rebuild still ends in recovery mode, delete the codespace and create a new one on the same branch. Copy any files you added to `.data/` out first; deleting a codespace deletes them.
+
+### After Pulling Changes to `.devcontainer/`
+
+A `git pull` that changes `.devcontainer/devcontainer.json`, `requirements.txt` or `setup.sh` updates the files but not the running container. Run **Codespaces: Rebuild Container** to apply them, and choose **Full Rebuild** if the base image or features changed. Files in the repository folder, including `.data/`, survive a rebuild ([GitHub docs](https://docs.github.com/en/codespaces/developing-in-a-codespace/rebuilding-the-container-in-a-codespace#persisting-data-over-a-rebuild)).
+
 ### Dependencies Not Installed
 
 **Symptom:** `ModuleNotFoundError: No module named 'haversine'`
