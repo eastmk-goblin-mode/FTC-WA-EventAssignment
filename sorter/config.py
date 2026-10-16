@@ -21,6 +21,8 @@ DEFAULTS = {
     "flag_nearest_miles": 75.0,
     "flag_over": 90.0,
     "flag_looks_closer": 30.0,
+    "flag_underfilled": 50.0,
+    "event_summary": ".data/event_summary.csv",
 }
 
 # (section, key) in sorter.toml -> (setting name, accepted types). Setting None = read elsewhere.
@@ -40,6 +42,8 @@ KEYS = {
     ("review", "nearest_miles"): ("flag_nearest_miles", (int, float)),
     ("review", "travel_minutes"): ("flag_over", (int, float)),
     ("review", "looks_closer_minutes"): ("flag_looks_closer", (int, float)),
+    ("review", "underfilled_percent"): ("flag_underfilled", (int, float)),
+    ("files", "event_summary"): ("event_summary", (str,)),
 }
 SECTIONS = {s for s, _ in KEYS if s}
 OTHER_SECTIONS = {"zip_overrides"}  # read by tools/build_zip_table.py, which validates its entries

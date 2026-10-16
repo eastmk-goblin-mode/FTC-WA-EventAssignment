@@ -137,6 +137,8 @@ For methodology details and trade-offs, see the algorithm comparison analysis (t
 | Looks closer on the map: an event nearer as the crow flies is 30+ minutes longer by road (water or mountains in the way; drive-matrix runs only) | `looks_closer_minutes` (30) | `--flag-looks-closer` |
 
 Miles are drive miles for the route the sorter chose (ferry or road) when `.data/drive_matrix.csv` exists, straight-line miles otherwise.
+
+**Event summary** (`.data/event_summary.csv`, set by `event_summary` in `[files]`): one row per event with `event_id, event_zipCode, capacity, teams, fill_percent, flagged_for_manual_review, flagged_reason`. An event with no teams is flagged `empty`; one filled below `underfilled_percent` of capacity (in `[review]`, default 50; flag `--flag-underfilled`) is flagged `under-filled`. The run summary lists the flagged events.
 - Coordinates use WKT format: `POINT (longitude latitude)`
 
 ### Drive-Time Setup

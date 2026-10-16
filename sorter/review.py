@@ -13,6 +13,7 @@ class Rules:
     nearest_miles: float = 75     # flag teams whose NEAREST event is farther than this
     travel: float = 90            # flag travel over this, in drive minutes (or straight-line miles)
     looks_closer_minutes: float = 30  # flag when a crow-flies-nearer event is this much longer by road
+    underfilled_percent: float = 50   # flag events filled below this share of capacity
 
 
 def truthy(value):
@@ -70,3 +71,24 @@ def looks_closer_event(assigned_code, assigned_zip, events, straight_miles, driv
             if best is None or miles < best[1]:
                 best = (e["code"], round(miles, 1), round(minutes - base_minutes, 1))
     return best
+
+
+def event_review(events, fill, rules):
+    """One summary row per event: fill against capacity, flagged when empty or under-filled.
+
+    events: [{"code", "zip", "cap"}]; fill: {event_code: teams placed}.
+    """
+    out = []
+    for e in events:
+        teams, cap = fill.get(e["code"], 0), e["cap"]
+        percent = round(100 * teams / cap) if cap else 0
+        if teams == 0:
+            reason = "empty: no teams placed"
+        elif percent < rules.underfilled_percent:
+            reason = f"under-filled: {teams} of {cap} seats ({percent}%, below {rules.underfilled_percent:g}%)"
+        else:
+            reason = ""
+        out.append({"event_id": e["code"], "event_zipCode": e["zip"], "capacity": cap, "teams": teams,
+                    "fill_percent": percent, "flagged_for_manual_review": bool(reason),
+                    "flagged_reason": reason})
+    return out

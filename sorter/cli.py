@@ -113,6 +113,23 @@ OUTPUT_COLUMNS = [
 ]
 
 
+EVENT_COLUMNS = ["event_id", "event_zipCode", "capacity", "teams", "fill_percent",
+                 "flagged_for_manual_review", "flagged_reason"]
+
+
+def write_event_summary(path, events, assignment, rules):
+    """Write one row per event and return the rows that were flagged."""
+    fill = Counter(code for code in assignment.values() if code)
+    rows = review.event_review(events, fill, rules)
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", newline="") as f:
+        w = csv.DictWriter(f, EVENT_COLUMNS)
+        w.writeheader()
+        for r in rows:
+            w.writerow({**r, "flagged_for_manual_review": "true" if r["flagged_for_manual_review"] else "false"})
+    return [r for r in rows if r["flagged_for_manual_review"]]
+
+
 def write_map_output(output_path, teams, team_names, team_host, assignment, events, zips,
                      distance_fn, mode, program, rules, miles_fn, overrides=None, override_notes=None,
                      zip_states=None, region=()):
@@ -238,6 +255,9 @@ def main():
     parser.add_argument("--large-zip", type=int, help="Flag zips with this many teams or more")
     parser.add_argument("--flag-looks-closer", type=float,
                        help="Flag when an event nearer as the crow flies is this many minutes longer by road")
+    parser.add_argument("--flag-underfilled", type=float,
+                       help="Flag events filled below this percent of capacity (empty events always)")
+    parser.add_argument("--event-summary", help="Event summary CSV to write")
     
     parsed = vars(parser.parse_args())
     try:
@@ -248,7 +268,8 @@ def main():
     print(f"Settings from {config_path or 'built-in defaults'}: program={args.program}, method={args.method}, "
           f"ferry_wait={args.ferry_wait:g}, review small_zip={args.small_zip} large_zip={args.large_zip} "
           f"assigned_miles={args.flag_miles:g} nearest_miles={args.flag_nearest_miles:g} "
-          f"travel={args.flag_over:g} looks_closer={args.flag_looks_closer:g}")
+          f"travel={args.flag_over:g} looks_closer={args.flag_looks_closer:g} "
+          f"underfilled={args.flag_underfilled:g}%")
     
     # Load data
     try:
@@ -283,7 +304,8 @@ def main():
             sys.exit(2)
         rules = review.Rules(small_zip=args.small_zip, large_zip=args.large_zip,
                              assigned_miles=args.flag_miles, nearest_miles=args.flag_nearest_miles,
-                             travel=args.flag_over, looks_closer_minutes=args.flag_looks_closer)
+                             travel=args.flag_over, looks_closer_minutes=args.flag_looks_closer,
+                             underfilled_percent=args.flag_underfilled)
         
         # Determine distance function
         drive_matrix_path = Path(args.drive_matrix)
@@ -354,6 +376,12 @@ def main():
                 print("\nTo cover another state, add it to states in sorter.toml, then rerun setup.sh "
                       "and tools/enable_drive_times.sh.")
         print(f"\nWrote {args.out}")
+        flagged_events = write_event_summary(args.event_summary, events, assignment, rules)
+        if flagged_events:
+            print(f"\nEvents flagged for review ({len(flagged_events)} of {len(events)}):")
+            for r in flagged_events:
+                print(f"  {r['event_id']}: {r['flagged_reason']}")
+        print(f"Wrote {args.event_summary}")
         
         # Exit with error if any teams are unassigned
         if status_count.get("unassigned", 0) > 0:

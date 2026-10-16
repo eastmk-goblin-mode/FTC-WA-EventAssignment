@@ -17,6 +17,7 @@ teams           = ".data/teams.csv"             # team_number,team_name,zip_code
 events          = ".data/events.csv"            # event_code,event_zip,capacity
 pre_assignments = ".data/pre-assignments.csv"   # event_code,team_number[,notes]; used only if it exists
 output          = ".data/team_assignments.csv"
+event_summary   = ".data/event_summary.csv"     # one row per event: fill, and why it was flagged
 drive_matrix    = ".data/drive_matrix.csv"      # without it the sorter uses straight-line miles
 
 [sorting]
@@ -31,6 +32,7 @@ nearest_miles  = 75        # nearest event farther than this
 travel_minutes = 90        # travel over this (straight-line miles when there is no drive matrix)
 looks_closer_minutes = 30  # an event nearer as the crow flies is at least this much longer by road
                            # (water or mountains in the way); needs a drive matrix
+underfilled_percent  = 50  # events below this share of capacity are flagged; empty events always are
 
 # Replace a zip's centre point when it routes badly, e.g. when it lands in a forest or on
 # water. Applied by setup.sh when it builds .data/zips.csv; afterwards rerun setup.sh and

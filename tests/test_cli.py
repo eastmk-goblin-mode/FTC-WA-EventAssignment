@@ -73,7 +73,8 @@ class CliEndToEndTest(unittest.TestCase):
     def run_cli(self, *extra):
         d = self.d
         # Own config, so the repo's sorter.toml and any local .data/ files can't leak in.
-        (d / "sorter.toml").write_text(f'[files]\npre_assignments = "{d / "no-pre.csv"}"\n')
+        (d / "sorter.toml").write_text(f'[files]\npre_assignments = "{d / "no-pre.csv"}"\n'
+                                       f'event_summary = "{d / "events-out.csv"}"\n')
         cmd = [sys.executable, "-m", "sorter.cli", "--config", d / "sorter.toml",
                "--program", "FLL", "--teams", d / "teams.csv",
                "--events", d / "events.csv", "--zips", d / "zips.csv", "--zip-states", d / "zip_states.csv",
@@ -153,7 +154,7 @@ class CliEndToEndTest(unittest.TestCase):
             'program = "FTC"\n'
             f'[files]\nteams = "{d / "teams.csv"}"\nevents = "{d / "events.csv"}"\n'
             f'output = "{d / "cfg-out.csv"}"\ndrive_matrix = "{d / "drive.csv"}"\n'
-            f'pre_assignments = "{d / "no-pre.csv"}"\n'
+            f'pre_assignments = "{d / "no-pre.csv"}"\nevent_summary = "{d / "cfg-events.csv"}"\n'
             '[review]\nsmall_zip = 0\n')
         cmd = [sys.executable, "-m", "sorter.cli", "--config", d / "run.toml",
                "--zips", d / "zips.csv", "--zip-states", d / "zip_states.csv"]
@@ -186,6 +187,17 @@ class CliEndToEndTest(unittest.TestCase):
                          r"looks closer on the map: TAC is [\d.]+ mi straight-line but 40.0 min farther by road")
         _, rows = self.run_cli("--drive-matrix", d / "drive.csv", "--small-zip", "0", "--flag-looks-closer", "45")
         self.assertNotIn("looks closer", rows["2"]["flagged_reason"])
+
+    def test_event_summary_flags_empty_and_under_filled_events(self):
+        d = self.d
+        write_csv(d / "events.csv", [("SEA", "98101", 2), ("TAC", "98402", 10), ("SPARE", "98101", 4)])
+        result, _ = self.run_cli("--drive-matrix", d / "missing.csv")
+        with open(d / "events-out.csv") as f:
+            rows = {r["event_id"]: r for r in csv.DictReader(f)}
+        self.assertEqual(rows["SEA"]["flagged_for_manual_review"], "false")      # 2 of 2
+        self.assertEqual(rows["TAC"]["flagged_reason"], "under-filled: 3 of 10 seats (30%, below 50%)")  # Tacoma pair + Portland
+        self.assertEqual(rows["SPARE"]["flagged_reason"], "empty: no teams placed")
+        self.assertIn("Events flagged for review (2 of 3)", result.stdout)
 
     def test_bad_config_stops_with_a_message(self):
         (self.d / "bad.toml").write_text("[review]\nsmall_zips = 2\n")

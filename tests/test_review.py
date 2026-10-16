@@ -107,6 +107,32 @@ class LooksCloserEventTest(unittest.TestCase):
         self.assertIsNone(self.find())
 
 
+class EventReviewTest(unittest.TestCase):
+    EVENTS = [{"code": "FULL", "zip": "A", "cap": 32}, {"code": "HALF", "zip": "B", "cap": 32},
+              {"code": "LOW", "zip": "C", "cap": 24}, {"code": "NONE", "zip": "D", "cap": 32}]
+
+    def review(self, rules=RULES):
+        return {r["event_id"]: r for r in review.event_review(self.EVENTS, {"FULL": 30, "HALF": 16, "LOW": 11}, rules)}
+
+    def test_empty_and_under_filled_events_are_flagged(self):
+        rows = self.review()
+        self.assertEqual(rows["NONE"]["flagged_reason"], "empty: no teams placed")
+        self.assertEqual(rows["LOW"]["flagged_reason"], "under-filled: 11 of 24 seats (46%, below 50%)")
+        self.assertFalse(rows["FULL"]["flagged_for_manual_review"])
+
+    def test_exactly_at_the_threshold_is_not_flagged(self):
+        self.assertEqual(self.review()["HALF"]["fill_percent"], 50)
+        self.assertFalse(self.review()["HALF"]["flagged_for_manual_review"])
+
+    def test_threshold_is_configurable(self):
+        rows = self.review(review.Rules(underfilled_percent=95))
+        self.assertTrue(rows["FULL"]["flagged_for_manual_review"])  # 30 of 32 = 94%
+
+    def test_one_row_per_event_in_file_order(self):
+        self.assertEqual([r["event_id"] for r in review.event_review(self.EVENTS, {}, RULES)],
+                         ["FULL", "HALF", "LOW", "NONE"])
+
+
 class TruthyTest(unittest.TestCase):
     def test_host_values(self):
         for value in ("true", "TRUE", "yes", "Y", "1", "x", "T2-HOSTVENUE"):
