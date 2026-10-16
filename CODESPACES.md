@@ -105,14 +105,16 @@ python3 -m sorter.cli --program FLL \
 **What this does:**
 - Groups teams by zip code and places each group at the nearest event with room
 - Uses drive minutes if `.data/drive_matrix.csv` exists, otherwise straight-line miles
-- Writes one row per team with its event, coordinates, travel time or distance, `status` and `flag_reason`
+- Writes one row per team with its event, coordinates, drive time and distance, and any manual-review flags
 
 ### Step 2: Review the Output
 
-Every input team appears in `.data/team_assignments.csv` as one of:
-- `assigned` — placed at an event
-- `flagged` — placed, but travel is over the `--flag-over` threshold (default 90), so check it
-- `unassigned` — not placed; `flag_reason` says why and what to fix (see the README's "When teams come back unassigned")
+Every input team appears once in `.data/team_assignments.csv`:
+- `event_id` filled, `flagged_for_manual_review` = `false` — placed, nothing to check
+- `event_id` filled, `flagged_for_manual_review` = `true` — placed, but `flagged_reason` lists what to check (small or large zip group, long trip, far from any event)
+- `event_id` empty — not placed; `flagged_reason` starts with `unassigned:` and says why (see the README's "When teams come back unassigned")
+
+The run summary counts the flagged teams under each rule. The thresholds are options (`--small-zip`, `--large-zip`, `--flag-miles`, `--flag-nearest-miles`, `--flag-over`); the README lists their defaults.
 
 The command exits with code 1 when any team is unassigned, so an incomplete run isn't mistaken for a finished one.
 

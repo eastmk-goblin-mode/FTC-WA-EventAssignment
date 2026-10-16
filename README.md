@@ -109,7 +109,7 @@ python3 -m sorter.cli --teams .data/teams.csv --events .data/events.csv --progra
 
 - **Pre-assignments:** `--pre-assignments .data/pre-assignments.csv` (format: `event_code,team_number`)
 
-- **Map output:** CSV with standardized columns for visualization, status flags, and travel distances
+- **Map output:** CSV in the column layout agreed with the map team, with travel times, distances and manual-review flags
 
 ### Algorithm
 
@@ -120,14 +120,27 @@ For methodology details and trade-offs, see the algorithm comparison analysis (t
 ### File Formats
 
 **Input CSVs:**
-- `teams.csv`: `team_number,team_name,zip_code`
+- `teams.csv`: `team_number,team_name,zip_code[,host]` (a non-blank `host` other than false/no/0 marks a host team)
 - `events.csv`: `event_code,event_zip,capacity`
-- `pre-assignments.csv` (optional): `event_code,team_number`
+- `pre-assignments.csv` (optional): `event_code,team_number[,notes]`
 
-**Output CSV:**
-- **Required columns (map team):** `team_id, team_name, team_zipCode, team_coordinates, event_id, event_zipCode, event_coordinates, program`
-- **Operational columns:** `miles` (or `drive_minutes`), `status`, `flag_reason`
-- Status: `assigned`, `flagged` (over travel threshold), `unassigned` (no room or unknown zip)
+**Output CSV** (one row per input team):
+- **Required by the map team:** `team_id, team_name, team_zipCode, team_coordinates, event_id, event_zipCode, event_coordinates, program`
+- **Sorting team columns:** `is_host_team`, `from_manual_override`, `manual_override_notes`, `drive_minutes`, `drive_distance`, `flagged_for_manual_review`, `flagged_reason`, `straight_line_miles`
+- Booleans are written as `true` / `false`. `drive_minutes` and `drive_distance` are blank in straight-line runs.
+- An unassigned team has an empty `event_id` and is always flagged.
+- `flagged_reason` lists every rule the row hits, separated by `; `:
+
+| Rule | Option (default) |
+|---|---|
+| Unassigned, with the reason (see below) | — |
+| 3 or fewer teams in the zip | `--small-zip` (3) |
+| 30 or more teams in the zip | `--large-zip` (30) |
+| Assigned event over 40 miles | `--flag-miles` (40) |
+| Nearest event over 75 miles | `--flag-nearest-miles` (75) |
+| Travel over 90 drive minutes (straight-line miles without a matrix) | `--flag-over` (90) |
+
+Miles are drive miles for the route the sorter chose (ferry or road) when `.data/drive_matrix.csv` exists, straight-line miles otherwise.
 - Coordinates use WKT format: `POINT (longitude latitude)`
 
 ### Drive-Time Setup
@@ -152,9 +165,9 @@ For methodology details and trade-offs, see the algorithm comparison analysis (t
 
 ### When teams come back unassigned
 
-Each unassigned team gets a `flag_reason`, and the run summary lists the zips under each reason:
+Each unassigned team's `flagged_reason` starts with `unassigned:` and one of these causes, and the run summary lists the zips under each:
 
-| `flag_reason` | Cause | Fix |
+| Cause (after `unassigned:`) | Meaning | Fix |
 |---|---|---|
 | `zip is in ID, which region.env does not include` | The zip is real but outside the configured states | Add the state to `region.env`, rerun setup |
 | `zip code not found` | The zip is not in the US zip database | Check the team's zip for a typo |
@@ -180,4 +193,4 @@ Smoke test on your own data:
 python3 -m sorter.cli --program FLL --teams .data/teams.csv --events .data/events.csv --out .data/output.csv
 ```
 
-Every input team appears in the output as `assigned`, `flagged` (over the travel threshold), or `unassigned` with a reason. The command exits 1 when any team is unassigned, so the run is not mistaken for complete.
+Every input team appears once in the output. Placed teams have an `event_id`; `flagged_for_manual_review` marks rows to check, and unassigned teams are always flagged. The command exits 1 when any team is unassigned, so the run is not mistaken for complete.
