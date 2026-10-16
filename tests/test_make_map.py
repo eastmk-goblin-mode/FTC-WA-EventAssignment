@@ -6,6 +6,7 @@ import sys
 import tempfile
 import time
 import unittest
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -104,6 +105,26 @@ class PageTest(unittest.TestCase):
         try:
             self.assertEqual(httpd.server_address[0], "127.0.0.1")
         finally:
+            httpd.server_close()
+
+    def test_server_serves_only_the_map(self):
+        import threading
+        d = Path(tempfile.mkdtemp())
+        (d / "map.html").write_text("<p>map</p>")
+        (d / "teams.csv").write_text("1,Secret Team,98101\n")
+        httpd = make_map.make_server(d / "map.html", 0)
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        base = f"http://127.0.0.1:{httpd.server_address[1]}"
+        try:
+            page = urllib.request.urlopen(base + "/")  # redirected to the map
+            self.assertEqual(page.read().decode(), "<p>map</p>")
+            self.assertEqual(page.headers["Referrer-Policy"], "strict-origin-when-cross-origin")
+            for path in ("/teams.csv", "/../teams.csv", "/map.html/../teams.csv", "/.data/"):
+                with self.subTest(path=path), self.assertRaises(urllib.error.HTTPError) as e:
+                    urllib.request.urlopen(base + path)
+                self.assertEqual(e.exception.code, 404)
+        finally:
+            httpd.shutdown()
             httpd.server_close()
 
 

@@ -21,7 +21,6 @@ Usage: python3 tools/make_map.py [--input .data/team_assignments.csv] [--out .da
 """
 import argparse
 import csv
-import functools
 import http.server
 import json
 import math
@@ -138,6 +137,7 @@ def build(rows, review, event_rows=()):
 PAGE = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <title>Team assignments review map</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
  integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
@@ -202,7 +202,10 @@ if (location.protocol === "file:") {
   document.body.append(warn);
 }
 L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  maxZoom: 18, attribution: "&copy; OpenStreetMap contributors"}).addTo(map);
+  maxZoom: 18, attribution: "&copy; OpenStreetMap contributors",
+  // OpenStreetMap requires a Referer on tile requests; set it per tile so a stricter page
+  // policy (some proxies add one) cannot strip it.
+  referrerPolicy: "strict-origin-when-cross-origin"}).addTo(map);
 const hue = code => Math.round(360 * DATA.eventOrder.indexOf(code) / Math.max(1, DATA.eventOrder.length));
 const color = code => code ? `hsl(${hue(code)}, 70%, 45%)` : "#999";
 
@@ -380,14 +383,40 @@ def main():
     if a.serve:
         serve(Path(a.out), a.port)
     else:
-        print("To view it (map tiles need a web server, not a file:// URL), rerun with --serve, or:")
-        print(f"  python3 -m http.server {a.port} --bind 127.0.0.1 --directory {Path(a.out).parent}")
-        print(f"  then open http://127.0.0.1:{a.port}/{Path(a.out).name}")
+        print("To view it (map tiles need a web server, not a file:// URL), rerun with --serve.")
+
+
+class MapHandler(http.server.BaseHTTPRequestHandler):
+    """Serves the one map page and nothing else, so other files in .data/ (the team and
+    event CSVs) cannot be listed or downloaded through the server. "/" redirects to the map."""
+    page = None  # set by make_server
+
+    def do_GET(self):
+        path = self.path.split("?", 1)[0]
+        if path in ("/", ""):
+            self.send_response(302)
+            self.send_header("Location", "/" + self.page.name)
+            self.end_headers()
+            return
+        if path != "/" + self.page.name:
+            self.send_error(404, "Only the map is served here")
+            return
+        body = self.page.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, fmt, *args):
+        pass
 
 
 def make_server(page, port):
-    """An HTTP server for the map's folder, bound to 127.0.0.1 so other machines cannot connect."""
-    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(page.parent))
+    """An HTTP server for the map page only, bound to 127.0.0.1 so other machines cannot connect."""
+    handler = type("BoundMapHandler", (MapHandler,), {"page": page})
     return http.server.ThreadingHTTPServer(("127.0.0.1", port), handler)
 
 
