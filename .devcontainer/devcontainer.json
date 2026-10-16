@@ -16,6 +16,6 @@
       "onAutoForward": "silent"
     }
   },
-  "postCreateCommand": "pip install -r requirements.txt && bash setup.sh",
+  "postCreateCommand": "sudo apt-get update -qq && sudo apt-get install -y -qq osmium-tool && pip install -r requirements.txt && bash setup.sh",
   "waitFor": "postCreateCommand"
 }

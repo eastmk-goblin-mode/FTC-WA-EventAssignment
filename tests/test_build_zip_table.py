@@ -47,17 +47,6 @@ class BuildZipTableTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             bzt.export(self.db, ["WA", "ZZ"], self.tmp / "out")
 
-    def test_parse_states(self):
-        self.assertEqual(bzt.parse_states(" wa, or "), ["WA", "OR"])
-        for bad in ("", "Washington", "W1"):
-            with self.subTest(bad=bad), self.assertRaises(SystemExit):
-                bzt.parse_states(bad)
-
-    def test_region_file_is_read(self):
-        env = self.tmp / "region.env"
-        env.write_text("# comment\nSTATES=WA,ID\n")
-        self.assertEqual(bzt.region_states(env), ["WA", "ID"])
-
 
 @unittest.skipUnless(bzt.DB_CACHE.exists(), "zip database not downloaded")
 class RealDatabaseTest(unittest.TestCase):

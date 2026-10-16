@@ -40,7 +40,7 @@ DATA_DIR = ROOT / ".data"
 OUT = DATA_DIR / "drive_matrix.csv"
 META = DATA_DIR / "drive_matrix.meta.json"
 COLS = ["team_zip", "event_zip", "min_ferry_ok", "mi_ferry_ok", "min_no_ferry", "mi_no_ferry", "snap_m"]
-MAINLAND_ANCHOR = (47.0379, -122.9007)  # Olympia, on the I-5 road network
+MAINLAND_ANCHOR = (47.0379, -122.9007)  # Olympia, on the I-5 road network (Valhalla island test only)
 VALHALLA_MAX_CELLS = 100  # public server: "Exceeded max locations: 100" = sources x targets per request
 
 

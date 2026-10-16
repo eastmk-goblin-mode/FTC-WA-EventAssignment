@@ -24,27 +24,17 @@ import sys
 import urllib.request
 from pathlib import Path
 
+if __package__:
+    from .region import parse_states, region_states
+else:
+    from region import parse_states, region_states
+
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / ".data"
 DB_URL = "https://github.com/MacHu-GWU/uszipcode-project/releases/download/1.0.1.db/simple_db.sqlite"
 DB_SHA256 = "43383f108ef14dccd925107bc77705f622b1014111ad5c9e5e2a6837bb7f64ff"
 DB_CACHE = Path.home() / ".cache" / "uszipcode" / "simple_db.sqlite"
 COLS = ["zip", "lat", "lon", "city", "county", "state", "type"]
-
-
-def region_states(path=ROOT / "region.env"):
-    for line in path.read_text().splitlines():
-        if line.strip().startswith("STATES="):
-            return parse_states(line.split("=", 1)[1])
-    raise SystemExit(f"{path} has no STATES= line")
-
-
-def parse_states(text):
-    states = [s.strip().upper() for s in text.split(",") if s.strip()]
-    bad = [s for s in states if len(s) != 2 or not s.isalpha()]
-    if not states or bad:
-        raise SystemExit(f"States must be comma-separated USPS codes like WA,OR (got {text!r})")
-    return states
 
 
 def sha256(path):
