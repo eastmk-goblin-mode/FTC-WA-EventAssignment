@@ -126,7 +126,7 @@ For methodology details and trade-offs, see the algorithm comparison analysis (t
 
 **Output CSV** (one row per input team):
 - **Required by the map team:** `team_id, team_name, team_zipCode, team_coordinates, event_id, event_zipCode, event_coordinates, program`
-- **Sorting team columns:** `is_host_team`, `from_manual_override`, `manual_override_notes`, `drive_minutes`, `drive_distance`, `flagged_for_manual_review`, `flagged_reason`, `straight_line_miles`
+- **Sorting team columns:** `is_host_team`, `from_manual_override`, `manual_override_notes`, `drive_minutes`, `drive_distance`, `flagged_for_manual_review`, `flagged_reason`
 - Booleans are written as `true` / `false`. `drive_minutes` and `drive_distance` are blank in straight-line runs.
 - An unassigned team has an empty `event_id` and is always flagged.
 - `flagged_reason` lists every rule the row hits, separated by `; `:

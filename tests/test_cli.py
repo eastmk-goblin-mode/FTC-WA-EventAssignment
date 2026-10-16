@@ -89,7 +89,6 @@ class CliEndToEndTest(unittest.TestCase):
             "event_id", "event_zipCode", "event_coordinates", "program",
             "is_host_team", "from_manual_override", "manual_override_notes",
             "drive_minutes", "drive_distance", "flagged_for_manual_review", "flagged_reason",
-            "straight_line_miles",
         ])
 
     def test_drive_mode_unassigned_reasons_and_rebuild_hint(self):
@@ -120,7 +119,7 @@ class CliEndToEndTest(unittest.TestCase):
             "nearest event over 75 straight-line miles",
             "travel over 90 straight-line miles",
         ])
-        self.assertEqual(float(portland["straight_line_miles"]), float(reasons[1].split("(")[1].rstrip(")")))
+        self.assertEqual(portland["drive_distance"], "")
         self.assertIn("Flagged for manual review", result.stdout)
 
     def test_manual_override_columns(self):

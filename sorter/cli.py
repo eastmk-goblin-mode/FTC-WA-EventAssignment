@@ -89,7 +89,6 @@ OUTPUT_COLUMNS = [
     # Sorting team columns (the map team ignores these)
     "is_host_team", "from_manual_override", "manual_override_notes",
     "drive_minutes", "drive_distance", "flagged_for_manual_review", "flagged_reason",
-    "straight_line_miles",
 ]
 
 
@@ -158,7 +157,6 @@ def write_map_output(output_path, teams, team_names, team_host, assignment, even
                 counts["flagged" if reasons else "assigned"] += 1
             for r in reasons:
                 reason_counts[r.split(" (")[0]] += 1
-            straight = finite(geo.miles_straight_line(zip_code, event_zip, zips)) if event_code else None
 
             writer.writerow([
                 team["num"],
@@ -176,7 +174,6 @@ def write_map_output(output_path, teams, team_names, team_host, assignment, even
                 blank(assigned_miles) if mode == "drive" else "",
                 boolean(reasons),
                 "; ".join(reasons),
-                blank(straight),
             ])
     
     return counts, unassigned_zips, reason_counts
