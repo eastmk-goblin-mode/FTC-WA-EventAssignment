@@ -2,6 +2,7 @@
 import argparse
 import csv
 import math
+import os
 import sys
 from collections import Counter
 from pathlib import Path
@@ -145,6 +146,9 @@ OUTPUT_COLUMNS = [
 ]
 
 
+ASSIGNMENT_COLUMNS = ["team_id", "event_id"]
+
+
 EVENT_COLUMNS = ["event_id", "event_zipCode", "capacity", "teams", "fill_percent",
                  "flagged_for_manual_review", "flagged_reason"]
 
@@ -164,8 +168,11 @@ def write_event_summary(path, events, assignment, rules):
 
 def write_map_output(output_path, teams, team_names, team_host, assignment, events, zips,
                      distance_fn, mode, program, rules, miles_fn, overrides=None,
-                     zip_states=None, region=()):
+                     zip_states=None, region=(), assignments_path=None):
     """Write one row per input team, in OUTPUT_COLUMNS order.
+
+    If assignments_path is given, also write the same teams there with ASSIGNMENT_COLUMNS
+    only (event_id blank for unassigned teams).
 
     distance_fn is the travel cost the sorter used (drive minutes, or straight-line miles);
     miles_fn gives the distance in miles for the same route (drive miles, or straight-line).
@@ -197,9 +204,12 @@ def write_map_output(output_path, teams, team_names, team_host, assignment, even
     def boolean(value):
         return "true" if value else "false"
     
-    with open(output_path, "w", newline="") as f:
+    with open(output_path, "w", newline="") as f, \
+            open(assignments_path or os.devnull, "w", newline="") as af:
         writer = csv.writer(f, quoting=csv.QUOTE_MINIMAL)
         writer.writerow(OUTPUT_COLUMNS)
+        assignments_writer = csv.writer(af, quoting=csv.QUOTE_MINIMAL)
+        assignments_writer.writerow(ASSIGNMENT_COLUMNS)
         
         for team in teams:
             zip_code = team["zip"]
@@ -254,6 +264,7 @@ def write_map_output(output_path, teams, team_names, team_host, assignment, even
                 boolean(reasons),
                 "; ".join(reasons),
             ])
+            assignments_writer.writerow([team["num"], event_code or ""])
     
     return counts, unassigned_zips, reason_counts
 
@@ -271,7 +282,8 @@ def main():
     parser.add_argument("--teams", help="Teams CSV (number,name,zip[,host])")
     parser.add_argument("--events", help="Events CSV (code,zip,capacity)")
     parser.add_argument("--pre-assignments", help="Pre-assigned teams CSV (event,team_id[,is_host_team[,notes]])")
-    parser.add_argument("--out", help="Output CSV")
+    parser.add_argument("--out", help="Assignments CSV (team_id,event_id)")
+    parser.add_argument("--map-out", help="Map CSV with every column, for the map project and review map")
     parser.add_argument("--drive-matrix", help="Drive matrix CSV; without it, straight-line miles are used")
     parser.add_argument("--zips",
                        help="Zip centroids CSV (default: .data/zips.csv, falls back to reference/wa_zips.csv)")
@@ -376,8 +388,10 @@ def main():
         
         # Write output
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.map_out).parent.mkdir(parents=True, exist_ok=True)
         status_count, unassigned_zips, reason_counts = write_map_output(
-            output_path=args.out,
+            output_path=args.map_out,
+            assignments_path=args.out,
             teams=teams,
             team_names=team_names,
             team_host=team_host,
@@ -413,6 +427,7 @@ def main():
                 print("\nTo cover another state, add it to states in sorter.toml, then rerun setup.sh "
                       "and tools/enable_drive_times.sh.")
         print(f"\nWrote {args.out}")
+        print(f"Wrote {args.map_out}")
         flagged_events = write_event_summary(args.event_summary, events, assignment, rules)
         if flagged_events:
             print(f"\nEvents flagged for review ({len(flagged_events)} of {len(events)}):")

@@ -16,7 +16,7 @@ disk (file://) does not send, so the tiles come back "Access blocked". Serve it 
     python3 tools/make_map.py --serve      (writes the map, then serves it on 127.0.0.1:8765)
     then open http://127.0.0.1:8765/map.html, or the "Review map" port in a Codespace
 
-Usage: python3 tools/make_map.py [--input .data/team_assignments.csv] [--out .data/map.html]
+Usage: python3 tools/make_map.py [--input .data/team_assignments_map.csv] [--out .data/map.html]
                                  [--events .data/event_summary.csv] [--serve] [--port 8765]
 """
 import argparse
@@ -349,7 +349,7 @@ if (pts.length) map.fitBounds(pts, { padding: [20, 20] }); else map.setView([47.
 
 def main():
     ap = argparse.ArgumentParser(description="Write an HTML review map of the sorter's output")
-    ap.add_argument("--input", default=".data/team_assignments.csv", help="Sorter output CSV")
+    ap.add_argument("--input", default=".data/team_assignments_map.csv", help="Map CSV from the sorter")
     ap.add_argument("--out", default=".data/map.html", help="HTML file to write (keep it out of git)")
     ap.add_argument("--config", default="sorter.toml", help="Settings file, for the review thresholds")
     ap.add_argument("--events", default=".data/event_summary.csv", help="Event summary CSV from the sorter")
@@ -359,9 +359,13 @@ def main():
     a = ap.parse_args()
     try:
         with open(a.input, newline="", encoding="utf-8-sig") as f:
-            rows = list(csv.DictReader(f))
+            reader = csv.DictReader(f)
+            rows = list(reader)
     except FileNotFoundError:
         sys.exit(f"{a.input} not found. Run the sorter first: python3 -m sorter.cli")
+    if "team_coordinates" not in (reader.fieldnames or []):
+        sys.exit(f"{a.input} has no map columns. Use the sorter's map file "
+                 f"(map_output in sorter.toml, default .data/team_assignments_map.csv).")
     event_rows = []
     if Path(a.events).exists():
         with open(a.events, newline="", encoding="utf-8-sig") as f:

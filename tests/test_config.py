@@ -19,11 +19,11 @@ NO_FLAGS = {k: None for k in config.DEFAULTS}
 class ReadTest(unittest.TestCase):
     def test_reads_every_section(self):
         path = write('program = "FTC"\nstates = ["WA"]\n'
-                     '[files]\nteams = "t.csv"\noutput = "o.csv"\n'
+                     '[files]\nteams = "t.csv"\noutput = "o.csv"\nmap_output = "m.csv"\n'
                      '[sorting]\nmethod = "largest"\nferry_wait = 45\n'
                      '[review]\nsmall_zip = 2\ntravel_minutes = 120\n')
         self.assertEqual(config.read(path), {
-            "program": "FTC", "teams": "t.csv", "out": "o.csv", "method": "largest",
+            "program": "FTC", "teams": "t.csv", "out": "o.csv", "map_out": "m.csv", "method": "largest",
             "ferry_wait": 45, "small_zip": 2, "flag_over": 120})
 
     def test_unknown_setting_is_named(self):

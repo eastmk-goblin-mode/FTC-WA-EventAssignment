@@ -78,11 +78,11 @@ class CliEndToEndTest(unittest.TestCase):
         cmd = [sys.executable, "-m", "sorter.cli", "--config", d / "sorter.toml",
                "--program", "FLL", "--teams", d / "teams.csv",
                "--events", d / "events.csv", "--zips", d / "zips.csv", "--zip-states", d / "zip_states.csv",
-               "--out", d / "out.csv", *extra]
+               "--out", d / "out.csv", "--map-out", d / "map-out.csv", *extra]
         result = subprocess.run([str(c) for c in cmd], cwd=ROOT, capture_output=True, text=True)
-        if not (d / "out.csv").exists():
+        if not (d / "map-out.csv").exists():
             return result, {}
-        with open(d / "out.csv") as f:
+        with open(d / "map-out.csv") as f:
             reader = csv.DictReader(f)
             rows = {r["team_id"]: r for r in reader}
         self.header = reader.fieldnames
@@ -167,19 +167,29 @@ class CliEndToEndTest(unittest.TestCase):
         _, rows = self.run_cli("--drive-matrix", self.d / "drive.csv")
         self.assertEqual(sorted(rows), ["1", "2", "3", "4", "5", "6"])
 
+    def test_assignments_file_has_team_and_event_only(self):
+        _, rows = self.run_cli("--drive-matrix", self.d / "drive.csv")
+        with open(self.d / "out.csv") as f:
+            reader = csv.DictReader(f)
+            slim = {r["team_id"]: r["event_id"] for r in reader}
+        self.assertEqual(reader.fieldnames, ["team_id", "event_id"])
+        self.assertEqual(slim, {t: r["event_id"] for t, r in rows.items()})
+        self.assertEqual(slim["4"], "")  # unassigned teams keep their row, with no event
+
     def test_config_file_alone_drives_a_run(self):
         d = self.d
         (d / "run.toml").write_text(
             'program = "FTC"\n'
             f'[files]\nteams = "{d / "teams.csv"}"\nevents = "{d / "events.csv"}"\n'
-            f'output = "{d / "cfg-out.csv"}"\ndrive_matrix = "{d / "drive.csv"}"\n'
+            f'output = "{d / "cfg-out.csv"}"\nmap_output = "{d / "cfg-map.csv"}"\n'
+            f'drive_matrix = "{d / "drive.csv"}"\n'
             f'pre_assignments = "{d / "no-pre.csv"}"\nevent_summary = "{d / "cfg-events.csv"}"\n'
             '[review]\nsmall_zip = 0\n')
         cmd = [sys.executable, "-m", "sorter.cli", "--config", d / "run.toml",
                "--zips", d / "zips.csv", "--zip-states", d / "zip_states.csv"]
         result = subprocess.run([str(c) for c in cmd], cwd=ROOT, capture_output=True, text=True)
         self.assertIn("Settings from", result.stdout)
-        with open(d / "cfg-out.csv") as f:
+        with open(d / "cfg-map.csv") as f:
             rows = {r["team_id"]: r for r in csv.DictReader(f)}
         self.assertEqual(rows["1"]["program"], "FTC")
         self.assertEqual(rows["1"]["flagged_for_manual_review"], "false")  # small_zip = 0 from the file

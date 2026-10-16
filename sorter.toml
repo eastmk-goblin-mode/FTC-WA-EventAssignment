@@ -16,7 +16,8 @@ states = ["WA", "OR"]
 teams           = ".data/teams.csv"             # team_number,team_name,zip_code[,host]
 events          = ".data/events.csv"            # event_code,event_zip,capacity
 pre_assignments = ".data/pre-assignments.csv"   # event,team_id,is_host_team,notes; used only if it exists
-output          = ".data/team_assignments.csv"
+output          = ".data/team_assignments.csv"      # team_id,event_id only
+map_output      = ".data/team_assignments_map.csv"  # every column, in the layout agreed with the map project
 event_summary   = ".data/event_summary.csv"     # one row per event: fill, and why it was flagged
 drive_matrix    = ".data/drive_matrix.csv"      # without it the sorter uses straight-line miles
 
