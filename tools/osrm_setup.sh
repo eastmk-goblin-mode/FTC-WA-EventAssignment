@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build and start a self-hosted OSRM server for the states in region.env, the
+# Build and start a self-hosted OSRM server for the states in sorter.toml, the
 # drive-time source for tools/build_drive_matrix.py. Works on macOS (Homebrew) and
 # on Linux / GitHub Codespaces (Docker, using the official ghcr.io/project-osrm/osrm-backend
 # image). Nothing leaves the machine except the public map downloads from Geofabrik.

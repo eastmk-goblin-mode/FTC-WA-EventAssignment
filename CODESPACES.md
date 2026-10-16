@@ -25,7 +25,7 @@ GitHub Codespaces provides a complete, cloud-based development environment that 
 The codespace will automatically:
 - ✅ Create a Python 3.12 container
 - ✅ Install `osmium-tool` (used only for drive-time mode) and the dependencies in `requirements.txt`
-- ✅ Run `setup.sh`, which creates `.data/` and builds `.data/zips.csv` for the states in `region.env`
+- ✅ Run `setup.sh`, which creates `.data/` and builds `.data/zips.csv` for the states in `sorter.toml`
 - ✅ Configure git with your GitHub identity
 
 **Expected setup time:** 1-2 minutes
@@ -37,7 +37,7 @@ Running postCreateCommand...
 Successfully installed haversine-2.8.1 prettytable-3.10.2 ...
 === Setting up team sorter ===
 Wrote .data/zips.csv: 1225 zips (WA 733, OR 492).
-✓ Zip table built for the states in region.env
+✓ Zip table built for the states in sorter.toml
 ```
 
 If setup prints "Could not build the zip table (no network?)", it fell back to `reference/wa_zips.csv`, which covers Washington only. Rerun `bash setup.sh` once the codespace has network access.
@@ -83,7 +83,7 @@ FTC-WA-EventAssignment/
 │   └── drive_matrix.csv      # built by tools/enable_drive_times.sh (optional)
 ├── .devcontainer/
 │   └── devcontainer.json
-├── region.env                # which states are covered
+├── sorter.toml               # run settings: program, files, states, review thresholds
 ├── reference/wa_zips.csv     # offline fallback zip table (Washington only)
 ├── sorter/                   # the team sorter
 ├── tests/
@@ -95,12 +95,10 @@ FTC-WA-EventAssignment/
 ### Step 1: Sort Teams
 
 ```bash
-python3 -m sorter.cli --program FLL \
-  --teams .data/teams.csv \
-  --events .data/events.csv \
-  --pre-assignments .data/pre-assignments.csv \
-  --out .data/team_assignments.csv
+python3 -m sorter.cli
 ```
+
+It reads the program, file names and review thresholds from `sorter.toml`, and prints the settings it used. Edit that file to change them, or pass a flag for a single run (`python3 -m sorter.cli --help` lists them).
 
 **What this does:**
 - Groups teams by zip code and places each group at the nearest event with room
@@ -114,7 +112,7 @@ Every input team appears once in `.data/team_assignments.csv`:
 - `event_id` filled, `flagged_for_manual_review` = `true` — placed, but `flagged_reason` lists what to check (small or large zip group, long trip, far from any event)
 - `event_id` empty — not placed; `flagged_reason` starts with `unassigned:` and says why (see the README's "When teams come back unassigned")
 
-The run summary counts the flagged teams under each rule. The thresholds are options (`--small-zip`, `--large-zip`, `--flag-miles`, `--flag-nearest-miles`, `--flag-over`); the README lists their defaults.
+The run summary counts the flagged teams under each rule. The thresholds are in the `[review]` section of `sorter.toml`; the README lists their defaults.
 
 The command exits with code 1 when any team is unassigned, so an incomplete run isn't mistaken for a finished one.
 
@@ -124,7 +122,7 @@ The command exits with code 1 when any team is unassigned, so an incomplete run 
 bash tools/enable_drive_times.sh
 ```
 
-This downloads the OpenStreetMap extract for each state in `region.env`, builds a local OSRM routing server, and writes `.data/drive_matrix.csv`. Rerun the sorter afterwards. See the memory note under [Machine Types & Performance](#machine-types--performance) before running it on the default machine.
+This downloads the OpenStreetMap extract for each state in `sorter.toml`, builds a local OSRM routing server, and writes `.data/drive_matrix.csv`. Rerun the sorter afterwards. See the memory note under [Machine Types & Performance](#machine-types--performance) before running it on the default machine.
 
 Kevin's original scripts (`assign_home_leagues.py`, `process_event_preferences.py`) read hardcoded paths under `./data/` and need the `uszipcode` package, which fails on Python 3.12, so they don't run in this codespace.
 

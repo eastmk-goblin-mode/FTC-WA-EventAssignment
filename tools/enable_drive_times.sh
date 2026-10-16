@@ -2,9 +2,9 @@
 # Enable drive-time mode by setting up OSRM and building the drive matrix.
 # This is optional - the sorter works in straight-line mode without it.
 #
-# Covers the states in region.env. Requirements:
+# Covers the states in sorter.toml. Requirements:
 #   - Docker (on Linux/Codespaces) or Homebrew osrm-backend (on macOS)
-#   - osmium-tool when region.env lists more than one state (the devcontainer installs it)
+#   - osmium-tool when sorter.toml lists more than one state (the devcontainer installs it)
 #   - About 2 GB disk per state for map data and the routing graph
 #   - RAM: the graph build peaked at 4.7 GB for Washington alone; more states need more
 #
@@ -63,4 +63,4 @@ echo "✓ Drive-time mode enabled!"
 echo ""
 echo "The sorter will now use drive minutes instead of straight-line miles."
 echo "Re-run your sorting command:"
-echo "  python3 -m sorter.cli --program FLL --teams .data/teams.csv --events .data/events.csv"
+echo "  python3 -m sorter.cli        (settings are in sorter.toml)"

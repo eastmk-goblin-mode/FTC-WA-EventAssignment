@@ -22,7 +22,7 @@ class UnassignedReasonTest(unittest.TestCase):
         return cli.unassigned_reason(zip_code, ZIPS, ZIP_STATES, {"WA", "OR"}, mode, missing_drive_time)
 
     def test_zip_in_an_unconfigured_state(self):
-        self.assertEqual(self.reason("83702"), "zip is in ID, which region.env does not include")
+        self.assertEqual(self.reason("83702"), "zip is in ID, not one of the states in sorter.toml")
 
     def test_zip_that_does_not_exist(self):
         self.assertEqual(self.reason("98705"), "zip code not found")
@@ -102,7 +102,7 @@ class CliEndToEndTest(unittest.TestCase):
         self.assertEqual((rows["1"]["event_id"], rows["1"]["flagged_for_manual_review"]), ("SEA", "false"))
         self.assertEqual((rows["1"]["drive_minutes"], rows["1"]["drive_distance"]), ("0.0", "0.0"))
         self.assertEqual(rows["2"]["flagged_reason"], "unassigned: missing drive times; rebuild the drive matrix")
-        self.assertEqual(rows["3"]["flagged_reason"], "unassigned: zip is in ID, which region.env does not include")
+        self.assertEqual(rows["3"]["flagged_reason"], "unassigned: zip is in ID, not one of the states in sorter.toml")
         self.assertEqual(rows["4"]["flagged_reason"], "unassigned: zip code not found")
         # 98402 has a drive time only to TAC (1 seat); the 2-team zip group fits nowhere it
         # can be routed, and the missing 98402->SEA time is the real cause.

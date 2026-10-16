@@ -26,9 +26,9 @@ Launch a pre-configured development environment directly in your browser:
 3. **Add your input files to `.data/`** (git-ignored, so team data never reaches the repository):
    - `.data/teams.csv` and `.data/events.csv`, in the formats under [File Formats](#file-formats)
 
-4. **Run the sorter:**
+4. **Check `sorter.toml`, then run the sorter:**
    ```bash
-   python3 -m sorter.cli --program FLL --teams .data/teams.csv --events .data/events.csv
+   python3 -m sorter.cli
    ```
 
 **Cost management:**
@@ -74,42 +74,37 @@ In addition to the above functionality, there will likely be a script to ensure 
 
 ## Drive-Time Sorter (FLL)
 
-A zip-bucket greedy assignment algorithm for FLL with support for drive-time routing, covering the states listed in `region.env` (Washington and Oregon by default). Located in the `sorter/` package.
+A zip-bucket greedy assignment algorithm for FLL with support for drive-time routing, covering the states listed in `sorter.toml` (Washington and Oregon by default). Located in the `sorter/` package.
 
 ### Quick Start
 
-**Straight-line mode (default, works immediately):**
-```bash
-python3 -m sorter.cli --teams .data/teams.csv --events .data/events.csv --program FLL
-```
+1. Put `teams.csv` and `events.csv` (and optionally `pre-assignments.csv`) in `.data/`.
+2. Check the settings in `sorter.toml`: the program, the file names, and the review thresholds. Every setting has a comment.
+3. Run:
+   ```bash
+   python3 -m sorter.cli
+   ```
 
-**Drive-time mode (optional, one-time setup):**
+The run starts by printing the settings it used. Without `.data/drive_matrix.csv` it uses straight-line miles; to add drive times (optional, one-time setup):
 ```bash
-# Enable OSRM routing (~3-5 minutes first time)
 bash tools/enable_drive_times.sh
-
-# Run with drive times
-python3 -m sorter.cli --teams .data/teams.csv --events .data/events.csv --program FLL
+python3 -m sorter.cli
 ```
 
-### Features
+### Settings
 
-- **Program selection (required):**
-  - `--program FLL` / `--program FTC` / `--program FRC`
-  - Sets the program field in output (required for map visualization)
+`sorter.toml` holds every setting, grouped into `[files]`, `[sorting]` and `[review]`. To change a setting for one run without editing the file, pass the matching flag; `python3 -m sorter.cli --help` lists them. For example:
+```bash
+python3 -m sorter.cli --method largest --ferry-wait 60
+python3 -m sorter.cli --config ftc.toml        # a second settings file, e.g. for FTC
+```
+A misspelled setting or a value of the wrong type stops the run with the setting named.
 
-- **Multiple ordering strategies:**
-  - `--method bump` (default): Prioritizes teams with limited venue options
-  - `--method largest`: Kevin's largest-zip-first approach (compatible)  
-  - `--method regret`: Dynamic regret ordering
-
-- **Distance modes:**
-  - Straight-line miles (no setup required)
-  - OSRM drive minutes with ferry handling (opt-in via `enable_drive_times.sh`)
-
-- **Pre-assignments:** `--pre-assignments .data/pre-assignments.csv` (format: `event_code,team_number`)
-
-- **Map output:** CSV in the column layout agreed with the map team, with travel times, distances and manual-review flags
+- **Program:** `program` = `FLL`, `FTC` or `FRC`. It fills the `program` column the map team needs.
+- **Ordering:** `method` = `bump` (default; places zip groups with poor fallback options first), `largest` (Kevin's largest-zip-first) or `regret`.
+- **Distance:** straight-line miles with no setup, or OSRM drive minutes with ferry handling once `enable_drive_times.sh` has run. `ferry_wait` adds dock time to ferry trips.
+- **Pre-assignments:** used if the file exists. The run stops if it names a team or event that is not in this season's files.
+- **Output:** a CSV in the column layout agreed with the map team, with travel times, distances and manual-review flags.
 
 ### Algorithm
 
@@ -131,14 +126,14 @@ For methodology details and trade-offs, see the algorithm comparison analysis (t
 - An unassigned team has an empty `event_id` and is always flagged.
 - `flagged_reason` lists every rule the row hits, separated by `; `:
 
-| Rule | Option (default) |
-|---|---|
-| Unassigned, with the reason (see below) | — |
-| 3 or fewer teams in the zip | `--small-zip` (3) |
-| 30 or more teams in the zip | `--large-zip` (30) |
-| Assigned event over 40 miles | `--flag-miles` (40) |
-| Nearest event over 75 miles | `--flag-nearest-miles` (75) |
-| Travel over 90 drive minutes (straight-line miles without a matrix) | `--flag-over` (90) |
+| Rule | `[review]` setting in sorter.toml (default) | Flag |
+|---|---|---|
+| Unassigned, with the reason (see below) | — | — |
+| 3 or fewer teams in the zip | `small_zip` (3) | `--small-zip` |
+| 30 or more teams in the zip | `large_zip` (30) | `--large-zip` |
+| Assigned event over 40 miles | `assigned_miles` (40) | `--flag-miles` |
+| Nearest event over 75 miles | `nearest_miles` (75) | `--flag-nearest-miles` |
+| Travel over 90 drive minutes (straight-line miles without a matrix) | `travel_minutes` (90) | `--flag-over` |
 
 Miles are drive miles for the route the sorter chose (ferry or road) when `.data/drive_matrix.csv` exists, straight-line miles otherwise.
 - Coordinates use WKT format: `POINT (longitude latitude)`
@@ -147,12 +142,12 @@ Miles are drive miles for the route the sorter chose (ferry or road) when `.data
 
 **Requirements for OSRM routing:**
 - Docker (Linux/Codespaces) or Homebrew osrm-backend (macOS)
-- `osmium-tool` to merge state maps when `region.env` lists more than one state (installed by the devcontainer)
+- `osmium-tool` to merge state maps when `sorter.toml` lists more than one state (installed by the devcontainer)
 - About 2 GB of disk per state for map data and the routing graph
 - RAM: the graph build peaked at 4.7 GB for Washington alone, and more states need more. A 2-core/8 GB Codespace is borderline; see `CODESPACES.md` before choosing a larger machine, which costs more.
 
 **What happens:**
-1. Downloads the OpenStreetMap extract for each state in `region.env` from Geofabrik (WA about 350 MB, OR about 240 MB)
+1. Downloads the OpenStreetMap extract for each state in `sorter.toml` from Geofabrik (WA about 350 MB, OR about 240 MB)
 2. Merges them into one map so routes that cross a state line exist
 3. Builds the routing graph and starts a local OSRM server on port 5055
 4. Pre-computes the drive matrix for every team zip × event zip in `.data/teams.csv` and `.data/events.csv`
@@ -161,7 +156,7 @@ Miles are drive miles for the route the sorter chose (ferry or road) when `.data
 
 ### Region (which states are covered)
 
-`region.env` holds one setting, `STATES=WA,OR`. It controls both the zip table and the road map, so they always cover the same states. To add a state (for example Idaho), set `STATES=WA,OR,ID`, then rerun `bash setup.sh` and, for drive times, `bash tools/enable_drive_times.sh`.
+The `states` setting in `sorter.toml` (`states = ["WA", "OR"]`) controls both the zip table and the road map, so they always cover the same states. To add a state (for example Idaho), set `states = ["WA", "OR", "ID"]`, then rerun `bash setup.sh` and, for drive times, `bash tools/enable_drive_times.sh`.
 
 ### When teams come back unassigned
 
@@ -169,7 +164,7 @@ Each unassigned team's `flagged_reason` starts with `unassigned:` and one of the
 
 | Cause (after `unassigned:`) | Meaning | Fix |
 |---|---|---|
-| `zip is in ID, which region.env does not include` | The zip is real but outside the configured states | Add the state to `region.env`, rerun setup |
+| `zip is in ID, not one of the states in sorter.toml` | The zip is real but outside the configured states | Add the state to `states` in `sorter.toml`, rerun setup |
 | `zip code not found` | The zip is not in the US zip database | Check the team's zip for a typo |
 | `missing drive times; rebuild the drive matrix` | The drive matrix was built from different team or event files | Start OSRM (`bash tools/osrm_setup.sh`), then run the `build_drive_matrix.py` command the sorter prints |
 | `no event with room` | Every reachable event is full | Add capacity or place the team by hand |
@@ -178,7 +173,7 @@ The drive matrix only holds the zip pairs from the files it was built from. Rebu
 
 ### Setup Details
 
-`setup.sh` (run automatically in Codespaces) builds `.data/zips.csv` for the states in `region.env` with `tools/build_zip_table.py`. It downloads a 10.7 MB public zip database (US Census/USPS centroids) once and checks its SHA-256. Without network access, setup falls back to the committed `reference/wa_zips.csv`, which covers Washington only.
+`setup.sh` (run automatically in Codespaces) builds `.data/zips.csv` for the states in `sorter.toml` with `tools/build_zip_table.py`. It downloads a 10.7 MB public zip database (US Census/USPS centroids) once and checks its SHA-256. Without network access, setup falls back to the committed `reference/wa_zips.csv`, which covers Washington only.
 
 ### Testing
 
@@ -190,7 +185,7 @@ The tests use only the standard library. One test compares a fresh Washington ex
 
 Smoke test on your own data:
 ```bash
-python3 -m sorter.cli --program FLL --teams .data/teams.csv --events .data/events.csv --out .data/output.csv
+python3 -m sorter.cli
 ```
 
 Every input team appears once in the output. Placed teams have an `event_id`; `flagged_for_manual_review` marks rows to check, and unassigned teams are always flagged. The command exits 1 when any team is unassigned, so the run is not mistaken for complete.

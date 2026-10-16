@@ -89,7 +89,7 @@ def unassigned_reason(zip_code, zips, zip_states, region, mode, missing_drive_ti
     if zip_code not in zips:
         state = zip_states.get(zip_code)
         if state and state not in region:
-            return f"zip is in {state}, which region.env does not include"
+            return f"zip is in {state}, not one of the states in sorter.toml"
         return "zip code not found"
     if mode == "drive" and missing_drive_time:
         return "missing drive times; rebuild the drive matrix"
@@ -246,7 +246,7 @@ def main():
             elif Path("reference/wa_zips.csv").exists():
                 zips_path = Path("reference/wa_zips.csv")
                 print("Warning: .data/zips.csv not found; using reference/wa_zips.csv (Washington only). "
-                      "Run setup.sh to build the table for region.env.", file=sys.stderr)
+                      "Run setup.sh to build the table for the states in sorter.toml.", file=sys.stderr)
             else:
                 print("Error: no zip table in .data/zips.csv or reference/wa_zips.csv. Run setup.sh first.", file=sys.stderr)
                 sys.exit(2)
@@ -335,7 +335,7 @@ def main():
                 print("\nThese zips are in the zip table but not the drive matrix. With OSRM running, rebuild it:")
                 print(f"  python3 tools/build_drive_matrix.py --source osrm --teams {args.teams} --events {args.events}")
             if any(r.startswith("zip is in ") for r in unassigned_zips):
-                print("\nTo cover another state, add it to STATES in region.env, then rerun setup.sh "
+                print("\nTo cover another state, add it to states in sorter.toml, then rerun setup.sh "
                       "and tools/enable_drive_times.sh.")
         print(f"\nWrote {args.out}")
         

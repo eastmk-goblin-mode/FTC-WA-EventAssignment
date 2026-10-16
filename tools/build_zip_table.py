@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the zip centroid tables for the states in region.env.
+"""Build the zip centroid tables for the states in sorter.toml.
 
 Reads the uszipcode project's public zip database (US Census / USPS centroids,
 MIT-licensed) with the standard-library sqlite3 module. The uszipcode Python
@@ -8,7 +8,7 @@ package itself is not used: its sqlalchemy_mate dependency breaks on Python 3.12
 Writes:
   .data/zips.csv        zip,lat,lon,city,county,state,type for the configured states
   .data/zip_states.csv  zip,state for every US zip, so the sorter can tell a zip in
-                        an unconfigured state (add it to region.env) from a zip that
+                        an unconfigured state (add it to sorter.toml) from a zip that
                         does not exist (likely a typo)
 
 The 10.7 MB database is downloaded once to ~/.cache/uszipcode/ and checked
@@ -76,7 +76,7 @@ def export(db_path, states, out_dir=DATA_DIR):
     found = {r[5] for r in rows}
     missing = [s for s in states if s not in found]
     if missing:
-        raise SystemExit(f"No zips found for {', '.join(missing)}. Check region.env.")
+        raise SystemExit(f"No zips found for {', '.join(missing)}. Check states in sorter.toml.")
 
     with open(out_dir / "zips.csv", "w", newline="") as f:
         w = csv.writer(f)
@@ -91,8 +91,8 @@ def export(db_path, states, out_dir=DATA_DIR):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Build .data/zips.csv for the states in region.env")
-    ap.add_argument("--states", help="Comma-separated USPS codes (default: STATES in region.env)")
+    ap = argparse.ArgumentParser(description="Build .data/zips.csv for the states in sorter.toml")
+    ap.add_argument("--states", help="Comma-separated USPS codes (default: states in sorter.toml)")
     ap.add_argument("--db", type=Path, help="Use a local copy of simple_db.sqlite instead of downloading")
     a = ap.parse_args()
     states = parse_states(a.states) if a.states else region_states()

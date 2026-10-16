@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The configured region: the STATES list in region.env, shared by every setup tool.
+"""The configured region: the `states` list in sorter.toml, shared by every setup tool.
 
 Shell scripts call it to get the same answer the Python tools use:
   python3 tools/region.py states   ->  WA,OR
@@ -7,10 +7,11 @@ Shell scripts call it to get the same answer the Python tools use:
   python3 tools/region.py urls     ->  one Geofabrik extract URL per state, one per line
 """
 import sys
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-REGION_FILE = ROOT / "region.env"
+CONFIG_FILE = ROOT / "sorter.toml"
 GEOFABRIK = "https://download.geofabrik.de/north-america/us/{}-latest.osm.pbf"
 
 # Geofabrik's file name for each state. All 51 were checked to resolve on 2026-10-15.
@@ -30,18 +31,24 @@ GEOFABRIK_NAMES = {
 
 
 def parse_states(text):
-    states = [s.strip().upper() for s in text.split(",") if s.strip()]
+    """Accepts 'WA,OR' (a --states flag) or ['WA', 'OR'] (sorter.toml)."""
+    items = text if isinstance(text, list) else str(text).split(",")
+    states = [str(s).strip().upper() for s in items if str(s).strip()]
     bad = [s for s in states if s not in GEOFABRIK_NAMES]
     if not states or bad:
-        raise SystemExit(f"States must be comma-separated USPS codes like WA,OR (got {text!r})")
+        raise SystemExit(f"States must be USPS codes like WA,OR (got {text!r})")
     return states
 
 
-def region_states(path=REGION_FILE):
-    for line in path.read_text().splitlines():
-        if line.strip().startswith("STATES="):
-            return parse_states(line.split("=", 1)[1])
-    raise SystemExit(f"{path} has no STATES= line")
+def region_states(path=CONFIG_FILE):
+    try:
+        with open(path, "rb") as f:
+            data = tomllib.load(f)
+    except (OSError, tomllib.TOMLDecodeError) as e:
+        raise SystemExit(f"Cannot read {path}: {e}")
+    if "states" not in data:
+        raise SystemExit(f"{path} has no states = [...] setting")
+    return parse_states(data["states"])
 
 
 def tag(states):

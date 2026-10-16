@@ -12,14 +12,21 @@ ROOT = Path(__file__).resolve().parent.parent
 class RegionTest(unittest.TestCase):
     def test_parse_states(self):
         self.assertEqual(region.parse_states(" wa, or "), ["WA", "OR"])
-        for bad in ("", "Washington", "W1", "WA,XX"):
+        self.assertEqual(region.parse_states(["wa", "OR"]), ["WA", "OR"])
+        for bad in ("", "Washington", "W1", "WA,XX", []):
             with self.subTest(bad=bad), self.assertRaises(SystemExit):
                 region.parse_states(bad)
 
-    def test_region_file_is_read_past_comments(self):
-        env = Path(tempfile.mkdtemp()) / "region.env"
-        env.write_text("# STATES=XX in a comment\nSTATES=WA,ID\n")
-        self.assertEqual(region.region_states(env), ["WA", "ID"])
+    def test_states_read_from_config_file(self):
+        cfg = Path(tempfile.mkdtemp()) / "sorter.toml"
+        cfg.write_text('# states = ["XX"] in a comment\nprogram = "FLL"\nstates = ["WA", "ID"]\n')
+        self.assertEqual(region.region_states(cfg), ["WA", "ID"])
+
+    def test_config_without_states_stops(self):
+        cfg = Path(tempfile.mkdtemp()) / "sorter.toml"
+        cfg.write_text('program = "FLL"\n')
+        with self.assertRaises(SystemExit):
+            region.region_states(cfg)
 
     def test_tag_is_order_independent(self):
         self.assertEqual(region.tag(["WA", "OR"]), region.tag(["OR", "WA"]))
