@@ -62,6 +62,13 @@ class PageTest(unittest.TestCase):
                               "--events", d / "none.csv", *extra], cwd=ROOT, capture_output=True, text=True)
         return out, d / "map.html"
 
+    def test_page_has_collapsible_sections_and_ties_unassigned_to_the_card(self):
+        _, page = self.run_map([row()])
+        html = page.read_text()
+        for title in ("Review flags", "Filters", "How to read the map"):
+            self.assertIn(f">{title}</summary>", html)
+        self.assertIn('on.has("unassigned")', html)  # the Unassigned box also shows or hides the not-located card
+
     def test_values_cannot_close_the_script_block(self):
         _, page = self.run_map([row(team_name="</script><img src=x onerror=alert(1)>")])
         html = page.read_text()

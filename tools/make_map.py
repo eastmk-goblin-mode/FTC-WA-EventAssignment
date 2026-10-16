@@ -152,7 +152,10 @@ PAGE = """<!doctype html>
  #card label { display: block; margin: 8px 0 0; font-weight: 600; cursor: pointer; }
  #card .why { color: #444; font-weight: normal; margin: 2px 0 0 22px; }
  #card .n { color: #b00; font-weight: 600; }
- #card h3 { font-size: 14px; margin: 14px 0 2px; border-top: 1px solid #ddd; padding-top: 10px; }
+ #card summary { cursor: pointer; font-weight: 700; }
+ #card summary.top { font-size: 16px; margin-bottom: 4px; }
+ #card details.section { border-top: 1px solid #ddd; margin-top: 10px; padding-top: 8px; }
+ #card details.section > summary { font-size: 14px; }
  #events ul { list-style: none; margin: 0; padding: 0; }
  #events li { margin: 4px 0; }
  #events a { font-weight: 600; color: #0645ad; }
@@ -161,21 +164,32 @@ PAGE = """<!doctype html>
  #unplotted { display: none; position: absolute; bottom: 24px; left: 10px; z-index: 1000; max-width: 360px;
    max-height: 40vh; overflow: auto; background: #fff8e1; border: 1px solid #e0a800; border-radius: 8px;
    box-shadow: 0 2px 10px rgba(0,0,0,.25); padding: 10px 14px; }
- #unplotted h2 { font-size: 15px; margin: 0 0 4px; }
+ #unplotted summary { font-size: 15px; font-weight: 700; cursor: pointer; }
  #unplotted ul { margin: 4px 0 6px; padding-left: 18px; }
  #unplotted li div { color: #555; }
 </style></head><body>
 <div id="map"></div>
-<div id="unplotted"></div>
+<div id="unplotted"><details open><summary id="unplotted-title"></summary><div id="unplotted-body"></div></details></div>
 <div id="card">
- <h2>Review flags</h2>
- <div class="sub" id="summary"></div>
- <label><input type="checkbox" id="show-unflagged" checked> Teams with no flags</label>
- <div id="rules"></div>
- <div id="events"></div>
- <p class="sub" style="margin-top:10px">Dot color = assigned event. Red outline = flagged; the dashed
-  line runs to the team's event. Squares are venues. Teams in one zip are spread slightly so each can be
-  clicked; positions are zip centres, not addresses.</p>
+ <details open>
+  <summary class="top">Review flags</summary>
+  <div class="sub" id="summary"></div>
+  <details open class="section">
+   <summary>Filters</summary>
+   <label><input type="checkbox" id="show-unflagged" checked> Teams with no flags</label>
+   <div id="rules"></div>
+  </details>
+  <details open class="section" id="events-box" hidden>
+   <summary id="events-title">Events</summary>
+   <div id="events"></div>
+  </details>
+  <details class="section">
+   <summary>How to read the map</summary>
+   <p class="sub">Dot color = assigned event. Red outline = flagged; the dashed line runs to the team's
+    event. Squares are venues; a red square has an empty or under-filled event. Teams in one zip are
+    spread slightly so each can be clicked; positions are zip centres, not addresses.</p>
+  </details>
+ </details>
 </div>
 <script>
 const DATA = __DATA__;
@@ -262,7 +276,8 @@ function focusEvent(code) {
 if (DATA.events.length) {
   const box = document.getElementById("events");
   const flagged = DATA.events.filter(e => e.flagged);
-  box.append(el("h3", `Events (${flagged.length} of ${DATA.events.length} flagged)`));
+  document.getElementById("events-title").textContent = `Events (${flagged.length} of ${DATA.events.length} flagged)`;
+  document.getElementById("events-box").hidden = false;
   const list = el("ul");
   [...flagged, ...DATA.events.filter(e => !e.flagged)].forEach(e => {
     const li = el("li");
@@ -279,9 +294,13 @@ if (DATA.events.length) {
 const rulesBox = document.getElementById("rules");
 DATA.rules.forEach(r => {
   const label = el("label"); const cb = el("input"); cb.type = "checkbox"; cb.checked = true; cb.dataset.rule = r.key;
-  const n = el("span", ` (${r.count})`); n.className = "n";
+  const onMap = DATA.teams.filter(t => t.rules.includes(r.key)).length;
+  const off = r.count - onMap;
+  const n = el("span", off ? ` (${r.count}, ${off} not on map)` : ` (${r.count})`); n.className = "n";
   label.append(cb, document.createTextNode(" " + r.title), n);
-  const why = el("div", r.text); why.className = "why";
+  const why = el("div", r.text + (r.key === "unassigned" && DATA.unplotted.length
+    ? " Teams with no location are listed in the card at bottom left; this box shows or hides it." : ""));
+  why.className = "why";
   rulesBox.append(label, why);
 });
 const flaggedCount = DATA.teams.filter(t => t.reasons.length).length;
@@ -291,8 +310,8 @@ document.getElementById("summary").textContent =
 
 if (DATA.unplotted.length) {
   const card = document.getElementById("unplotted");
-  card.append(el("h2", DATA.unplotted.length === 1 ? "1 team is not on the map"
-                                                   : `${DATA.unplotted.length} teams are not on the map`));
+  document.getElementById("unplotted-title").textContent = DATA.unplotted.length === 1
+    ? "1 team is not on the map" : `${DATA.unplotted.length} teams are not on the map`;
   const ul = el("ul");
   DATA.unplotted.forEach(u => {
     const li = el("li");
@@ -301,7 +320,8 @@ if (DATA.unplotted.length) {
     if (u.reason) li.append(el("div", u.reason));
     ul.append(li);
   });
-  card.append(ul, el("div", "Check the zip in the teams file, or place the team with a pre-assignment."));
+  document.getElementById("unplotted-body").append(ul,
+    el("div", "Check the zip in the teams file, or place the team with a pre-assignment."));
   card.style.display = "block";
 }
 
@@ -312,6 +332,9 @@ function refresh() {
     const show = t.rules.length ? t.rules.some(k => on.has(k)) : unflagged;
     [dot, line].forEach(l => l && (show ? l.addTo(map) : l.remove()));
   });
+  if (DATA.unplotted.length) {
+    document.getElementById("unplotted").style.display = on.has("unassigned") ? "block" : "none";
+  }
 }
 document.getElementById("card").addEventListener("change", refresh);
 refresh();

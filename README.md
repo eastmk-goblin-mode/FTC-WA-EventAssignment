@@ -182,7 +182,7 @@ python3 tools/make_map.py --serve      # then open http://127.0.0.1:8765/map.htm
 ```
 
 - Each team is a dot colored by its event; flagged teams have a red outline and a dashed line to their event. Click a team for its event, drive time and flag reasons; event names in the popup are links that jump to that event's pin.
-- The card on the right explains each review rule with its threshold and count, filters the map by rule, and lists the events with empty or under-filled ones first.
+- The card on the right explains each review rule with its threshold and count, filters the map by rule, and lists the events with empty or under-filled ones first. Each section collapses: click its title. The Unassigned filter also shows or hides the card for teams with no location.
 - Teams whose zip could not be located are listed in a card at the bottom left.
 
 `--serve` writes `.data/map.html` and serves it on `127.0.0.1:8765` until Ctrl+C. The page has to come from a web server: opened as a file, OpenStreetMap blocks the map tiles because no HTTP Referer is sent. In a Codespace, open the forwarded **Review map** port from the Ports tab and keep its visibility **Private**. The page loads Leaflet (pinned by hash) and OpenStreetMap tiles; those servers see which area is viewed, not team data.
