@@ -171,6 +171,22 @@ class CliEndToEndTest(unittest.TestCase):
         self.assertIn("1 team number(s) not in the teams file: 999", result.stderr)
         self.assertIn("event code(s) not in the events file: NOPE", result.stderr)
 
+    def test_looks_closer_on_the_map_is_flagged(self):
+        d = self.d
+        write_csv(d / "events.csv", [("SEA", "98101", 10), ("TAC", "98402", 10)])
+        write_csv(d / "teams.csv", [("2", "Portland", "97201")])
+        # Made-up times: TAC is nearer as the crow flies but 40 minutes longer by road.
+        write_csv(d / "drive.csv", [
+            ("97201", "98101", 60, 50, 60, 50, 10),
+            ("97201", "98402", 100, 80, 100, 80, 10),
+        ], ["team_zip", "event_zip", "min_ferry_ok", "mi_ferry_ok", "min_no_ferry", "mi_no_ferry", "snap_m"])
+        _, rows = self.run_cli("--drive-matrix", d / "drive.csv", "--small-zip", "0")
+        self.assertEqual(rows["2"]["event_id"], "SEA")
+        self.assertRegex(rows["2"]["flagged_reason"],
+                         r"looks closer on the map: TAC is [\d.]+ mi straight-line but 40.0 min farther by road")
+        _, rows = self.run_cli("--drive-matrix", d / "drive.csv", "--small-zip", "0", "--flag-looks-closer", "45")
+        self.assertNotIn("looks closer", rows["2"]["flagged_reason"])
+
     def test_bad_config_stops_with_a_message(self):
         (self.d / "bad.toml").write_text("[review]\nsmall_zips = 2\n")
         result = subprocess.run([sys.executable, "-m", "sorter.cli", "--config", str(self.d / "bad.toml")],

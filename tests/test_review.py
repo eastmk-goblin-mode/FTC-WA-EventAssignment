@@ -62,6 +62,51 @@ class ReviewReasonsTest(unittest.TestCase):
                          ["5 or more teams in zip (5)", "assigned event over 10 drive miles (11)"])
 
 
+class LooksCloserTest(unittest.TestCase):
+    def test_reason_names_the_event_and_both_figures(self):
+        reasons = review.review_reasons(10, 10.0, 10.0, 10.0, None, "drive", RULES,
+                                        looks_closer=("OHH-SAT", 18.2, 41.0))
+        self.assertEqual(reasons, ["looks closer on the map: OHH-SAT is 18.2 mi straight-line "
+                                   "but 41.0 min farther by road"])
+
+    def test_no_candidate_means_no_flag(self):
+        self.assertEqual(review.review_reasons(10, 10.0, 10.0, 10.0, None, "drive", RULES,
+                                               looks_closer=None), [])
+
+    def test_order_puts_it_after_distance_rules(self):
+        reasons = review.review_reasons(10, 50.0, 10.0, 95.0, None, "drive", RULES,
+                                        looks_closer=("X", 5.0, 40.0))
+        self.assertEqual([r.split(" (")[0].split(":")[0] for r in reasons],
+                         ["assigned event over 40 drive miles", "looks closer on the map",
+                          "travel over 90 drive minutes"])
+
+
+class LooksCloserEventTest(unittest.TestCase):
+    """Picks the event that looks nearer than the assigned one but is far longer by road."""
+    EVENTS = [{"code": "ACROSS", "zip": "A"}, {"code": "ASSIGNED", "zip": "B"},
+              {"code": "ASSIGNED-SUN", "zip": "B"}, {"code": "NEARBY", "zip": "C"}]
+    STRAIGHT = {"A": 10.0, "B": 30.0, "C": 25.0}   # miles from the team
+    MINUTES = {"A": 95.0, "B": 40.0, "C": 50.0}    # drive minutes from the team
+
+    def find(self, threshold=30):
+        return review.looks_closer_event(
+            "ASSIGNED", "B", self.EVENTS, lambda z: self.STRAIGHT[z], lambda z: self.MINUTES[z], threshold)
+
+    def test_finds_the_water_crossing(self):
+        self.assertEqual(self.find(), ("ACROSS", 10.0, 55.0))
+
+    def test_threshold_filters_small_detours(self):
+        self.assertIsNone(self.find(threshold=60))
+
+    def test_same_venue_and_farther_events_are_ignored(self):
+        self.STRAIGHT = {"A": 40.0, "B": 30.0, "C": 35.0}
+        self.assertIsNone(self.find())
+
+    def test_unroutable_event_is_ignored(self):
+        self.MINUTES = {"A": float("inf"), "B": 40.0, "C": 50.0}
+        self.assertIsNone(self.find())
+
+
 class TruthyTest(unittest.TestCase):
     def test_host_values(self):
         for value in ("true", "TRUE", "yes", "Y", "1", "x", "T2-HOSTVENUE"):

@@ -29,3 +29,5 @@ large_zip      = 30        # this many teams in a zip, or more
 assigned_miles = 40        # assigned event farther than this
 nearest_miles  = 75        # nearest event farther than this
 travel_minutes = 90        # travel over this (straight-line miles when there is no drive matrix)
+looks_closer_minutes = 30  # an event nearer as the crow flies is at least this much longer by road
+                           # (water or mountains in the way); needs a drive matrix

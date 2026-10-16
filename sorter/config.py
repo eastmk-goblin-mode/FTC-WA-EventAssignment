@@ -20,6 +20,7 @@ DEFAULTS = {
     "flag_miles": 40.0,
     "flag_nearest_miles": 75.0,
     "flag_over": 90.0,
+    "flag_looks_closer": 30.0,
 }
 
 # (section, key) in sorter.toml -> (setting name, accepted types). Setting None = read elsewhere.
@@ -38,6 +39,7 @@ KEYS = {
     ("review", "assigned_miles"): ("flag_miles", (int, float)),
     ("review", "nearest_miles"): ("flag_nearest_miles", (int, float)),
     ("review", "travel_minutes"): ("flag_over", (int, float)),
+    ("review", "looks_closer_minutes"): ("flag_looks_closer", (int, float)),
 }
 SECTIONS = {s for s, _ in KEYS if s}
 

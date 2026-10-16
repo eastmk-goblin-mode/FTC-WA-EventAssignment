@@ -96,6 +96,13 @@ def unassigned_reason(zip_code, zips, zip_states, region, mode, missing_drive_ti
     return "no event with room"
 
 
+def summary_key(reason):
+    """The rule a flagged_reason entry belongs to, without its per-team figures."""
+    if reason.startswith("looks closer on the map"):
+        return "looks closer on the map"
+    return reason.split(" (")[0]
+
+
 OUTPUT_COLUMNS = [
     # Required by the map team
     "team_id", "team_name", "team_zipCode", "team_coordinates",
@@ -165,12 +172,19 @@ def write_map_output(output_path, teams, team_names, team_host, assignment, even
                 assigned_miles = finite(miles_fn(zip_code, event_zip))
                 why = None
 
+            looks_closer = None
+            if event_code and mode == "drive":
+                looks_closer = review.looks_closer_event(
+                    event_code, event_zip, events,
+                    lambda z: geo.miles_straight_line(zip_code, z, zips),
+                    lambda z: distance_fn(zip_code, z),
+                    rules.looks_closer_minutes)
             reasons = review.review_reasons(zip_counts[zip_code], assigned_miles, nearest_miles, travel,
-                                            why, unit, rules)
+                                            why, unit, rules, looks_closer=looks_closer)
             if event_code:
                 counts["flagged" if reasons else "assigned"] += 1
             for r in reasons:
-                reason_counts[r.split(" (")[0]] += 1
+                reason_counts[summary_key(r)] += 1
 
             writer.writerow([
                 team["num"],
@@ -222,6 +236,8 @@ def main():
     parser.add_argument("--flag-nearest-miles", type=float, help="Flag teams whose nearest event is farther than this")
     parser.add_argument("--small-zip", type=int, help="Flag zips with this many teams or fewer")
     parser.add_argument("--large-zip", type=int, help="Flag zips with this many teams or more")
+    parser.add_argument("--flag-looks-closer", type=float,
+                       help="Flag when an event nearer as the crow flies is this many minutes longer by road")
     
     parsed = vars(parser.parse_args())
     try:
@@ -232,7 +248,7 @@ def main():
     print(f"Settings from {config_path or 'built-in defaults'}: program={args.program}, method={args.method}, "
           f"ferry_wait={args.ferry_wait:g}, review small_zip={args.small_zip} large_zip={args.large_zip} "
           f"assigned_miles={args.flag_miles:g} nearest_miles={args.flag_nearest_miles:g} "
-          f"travel={args.flag_over:g}")
+          f"travel={args.flag_over:g} looks_closer={args.flag_looks_closer:g}")
     
     # Load data
     try:
@@ -267,7 +283,7 @@ def main():
             sys.exit(2)
         rules = review.Rules(small_zip=args.small_zip, large_zip=args.large_zip,
                              assigned_miles=args.flag_miles, nearest_miles=args.flag_nearest_miles,
-                             travel=args.flag_over)
+                             travel=args.flag_over, looks_closer_minutes=args.flag_looks_closer)
         
         # Determine distance function
         drive_matrix_path = Path(args.drive_matrix)
