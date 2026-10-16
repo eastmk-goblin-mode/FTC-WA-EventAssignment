@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Basic setup: create .data/ and copy the Washington zip table.
+# Basic setup: create .data/ and build the zip table for the states in region.env.
 # This runs automatically on fresh Codespaces (devcontainer postCreateCommand).
 # For drive-time mode, run tools/enable_drive_times.sh after this.
 
@@ -10,19 +10,18 @@ cd "$REPO_ROOT"
 
 echo "=== Setting up team sorter ==="
 
-# Create .data directory
 mkdir -p .data
 
-# Copy reference zip table to .data/
-if [ -f reference/wa_zips.csv ]; then
-    cp reference/wa_zips.csv .data/wa_zips.csv
-    ZIP_COUNT=$(tail -n +2 .data/wa_zips.csv | wc -l | tr -d ' ')
-    echo "✓ Copied Washington zip table: ${ZIP_COUNT} zip codes"
+if python3 tools/build_zip_table.py; then
+    echo "✓ Zip table built for the states in region.env"
+elif [ -f reference/wa_zips.csv ]; then
+    # Offline fallback: the committed table only covers Washington.
+    cp reference/wa_zips.csv .data/zips.csv
+    echo "⚠️  Could not build the zip table (no network?). Using reference/wa_zips.csv,"
+    echo "   which covers Washington only. Teams in other states will be flagged."
+    echo "   Rerun 'bash setup.sh' once you are online."
 else
-    echo "✗ reference/wa_zips.csv not found in repository"
-    echo ""
-    echo "This reference file should be committed to git."
-    echo "Something is wrong with the repository checkout."
+    echo "✗ Could not build the zip table and reference/wa_zips.csv is missing." >&2
     exit 1
 fi
 
@@ -30,7 +29,7 @@ echo ""
 echo "✓ Setup complete! The sorter is ready in straight-line mode."
 echo ""
 echo "Quick start:"
-echo "  python3 -m sorter.cli --teams .data/teams.csv --events .data/events.csv"
+echo "  python3 -m sorter.cli --program FLL --teams .data/teams.csv --events .data/events.csv"
 echo ""
 echo "To enable drive-time mode (optional, requires OSRM):"
 echo "  bash tools/enable_drive_times.sh"

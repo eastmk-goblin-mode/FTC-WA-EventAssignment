@@ -61,6 +61,5 @@ test.py
 # Ignore local data I/O files
 .data/
 data/
-!data/wa_zips.csv
 !data/.gitkeep
 output/

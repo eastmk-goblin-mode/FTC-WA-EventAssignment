@@ -158,7 +158,7 @@ def main():
     
     # Optional inputs
     parser.add_argument("--zips", 
-                       help="Zip centroids CSV (default: .data/wa_zips.csv, falls back to reference/wa_zips.csv)")
+                       help="Zip centroids CSV (default: .data/zips.csv, falls back to reference/wa_zips.csv)")
     parser.add_argument("--drive-matrix", default=".data/drive_matrix.csv",
                        help="Drive matrix CSV (default: .data/drive_matrix.csv)")
     parser.add_argument("--pre-assignments",
@@ -182,13 +182,15 @@ def main():
         if args.zips:
             zips_path = Path(args.zips)
         else:
-            # Default: try .data/ first, fall back to data/
-            if Path(".data/wa_zips.csv").exists():
-                zips_path = Path(".data/wa_zips.csv")
+            # Default: the generated table, then the committed Washington-only table
+            if Path(".data/zips.csv").exists():
+                zips_path = Path(".data/zips.csv")
             elif Path("reference/wa_zips.csv").exists():
                 zips_path = Path("reference/wa_zips.csv")
+                print("Warning: .data/zips.csv not found; using reference/wa_zips.csv (Washington only). "
+                      "Run setup.sh to build the table for region.env.", file=sys.stderr)
             else:
-                print("Error: wa_zips.csv not found in .data/ or reference/. Run tools/build_zip_table.py first.", file=sys.stderr)
+                print("Error: no zip table in .data/zips.csv or reference/wa_zips.csv. Run setup.sh first.", file=sys.stderr)
                 sys.exit(2)
         
         zips = geo.load_zips(zips_path)

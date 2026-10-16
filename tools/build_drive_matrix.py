@@ -18,7 +18,7 @@ Sources:
 Every source writes the same columns, so compare_variants.py does not care which ran:
   min_ferry_ok / mi_ferry_ok   fastest route, ferries allowed
   min_no_ferry / mi_no_ferry   fastest route without a ferry; BLANK if no road route exists
-Only zip centroids from data/wa_zips.csv are sent. No team names, numbers or counts.
+Only zip centroids from .data/zips.csv are sent. No team names, numbers or counts.
 
 Ferry handling differs by engine:
   osrm      exclude=ferry is a hard exclusion; an unreachable pair comes back null.
@@ -179,7 +179,7 @@ def main():
     ap = argparse.ArgumentParser(description="Build drive-time matrix between team and event zips using OSRM")
     ap.add_argument("--teams", default=".data/teams.csv", help="Teams CSV (default: .data/teams.csv)")
     ap.add_argument("--events", default=".data/events.csv", help="Events CSV (default: .data/events.csv)")
-    ap.add_argument("--zips", default=".data/wa_zips.csv", help="Zip centroids CSV (default: .data/wa_zips.csv)")
+    ap.add_argument("--zips", default=".data/zips.csv", help="Zip centroids CSV (default: .data/zips.csv)")
     ap.add_argument("--source", choices=["auto", "valhalla", "osrm", "cache"], default="auto")
     ap.add_argument("--valhalla-url", default="https://valhalla1.openstreetmap.de")
     ap.add_argument("--osrm-url", default="http://127.0.0.1:5055")
