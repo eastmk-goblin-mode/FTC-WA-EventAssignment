@@ -2,7 +2,7 @@
 
 ## What is GitHub Codespaces?
 
-GitHub Codespaces provides a complete, cloud-based development environment that runs in your browser. No local Python installation required — everything runs in a pre-configured container with all dependencies installed.
+GitHub Codespaces gives you a computer in the cloud that opens in your web browser. Python and everything this project needs are already installed in it, so nothing has to be installed on your own computer. You work in a copy of VS Code, a code editor: a file list on the left, files in the middle, and a terminal at the bottom where you type commands.
 
 ## Quick Start
 
@@ -22,20 +22,25 @@ GitHub Codespaces provides a complete, cloud-based development environment that 
 
 ### 2. Wait for Environment Setup
 
-The codespace will automatically:
-- ✅ Create a Python 3.12 container
-- ✅ Install all dependencies from `requirements.txt`
-- ✅ Configure git with your GitHub identity
+The first time a codespace starts, it sets itself up automatically:
+- ✅ Starts a machine with Python 3.12
+- ✅ Installs the tools this project uses (`osmium-tool`, needed only for drive times, and the packages in `requirements.txt`)
+- ✅ Runs `setup.sh`, which creates the `.data` folder and a table of zip code locations for the states in `sorter.toml`
+- ✅ Sets up git with your GitHub name, so you can save changes
 
 **Expected setup time:** 1-2 minutes
 
 You'll see this in the terminal:
 ```
 Running postCreateCommand...
-pip install -r requirements.txt
 ...
-Successfully installed haversine-2.8.1 uszipcode-1.0.1 ...
+Successfully installed haversine-2.8.1 prettytable-3.10.2 ...
+=== Setting up team sorter ===
+Wrote .data/zips.csv: 1225 zips (WA 733, OR 492).
+✓ Zip table built for the states in sorter.toml
 ```
+
+If setup prints "Could not build the zip table (no network?)", it fell back to `reference/wa_zips.csv`, which covers Washington only. Rerun `bash setup.sh` once the codespace has network access.
 
 ### 3. Verify Your Environment
 
@@ -45,88 +50,90 @@ Once the terminal prompt appears, verify the setup:
 # Check Python version (should be 3.12.x)
 python --version
 
-# Verify dependencies are installed
-pip list | grep haversine
-pip list | grep uszipcode
+# Verify the zip table was built
+head -3 .data/zips.csv
 
-# List repository contents
-ls -la
+# Run the test suite (standard library only, takes about a second)
+python3 -m unittest discover -s tests -t .
 ```
 
-### 4. Set Up Data Directory
+### 4. Add Your Input Files
 
-All input and output files should be stored in the `.data/` directory (git-ignored for privacy):
+All input and output files go in the `.data` folder, which `setup.sh` created. Git ignores it, so team data is never saved to the repository. To check, run:
 
 ```bash
-# Create the data directory
-mkdir -p .data
-
-# Verify it's git-ignored
-git check-ignore .data  # Should output: .data
+git check-ignore .data  # Should print: .data
 ```
 
-**Place your input files here:**
-- `.data/teams.csv` — Team roster with numbers, names, zip codes
-- `.data/leagues.csv` — League/event information with locations
-- `.data/preferences.csv` — Team event preference submissions (optional)
+**Add your files:** in the file list on the left, right-click `.data`, choose **Upload...**, and pick the files, or drag them from your computer onto the folder. The names must match exactly:
+- `.data/teams.csv`: team number, team name, zip code, and optionally a host mark. No header row.
+- `.data/events.csv`: event code, venue zip code, number of seats. No header row.
+- `.data/pre-assignments.csv` (optional): teams you place by hand, as `event,team_id,is_host_team,notes`. To convert an old file that uses `#` comment lines, run `python3 tools/convert_pre_assignments.py OLD.csv NEW.csv`.
+
+The README's [Your input files](README.md#your-input-files) section has examples of each. If you can't see `.data` when picking files on your own computer, it's hidden because its name starts with a dot; the README's [Finding the hidden `.data` folder](README.md#finding-the-hidden-data-folder-on-your-own-computer) shows how to show it.
 
 **Example file structure:**
 ```
 FTC-WA-EventAssignment/
 ├── .data/                    # Your local data (git-ignored)
 │   ├── teams.csv
-│   ├── leagues.csv
-│   ├── preferences.csv
-│   └── output/               # Generated assignments
+│   ├── events.csv
+│   ├── pre-assignments.csv   # optional
+│   ├── zips.csv              # built by setup.sh
+│   ├── zip_states.csv        # built by setup.sh
+│   └── drive_matrix.csv      # built by tools/enable_drive_times.sh (optional)
 ├── .devcontainer/
 │   └── devcontainer.json
-├── model/
-├── assign_home_leagues.py
-└── process_event_preferences.py
+├── sorter.toml               # run settings: program, files, states, review thresholds
+├── reference/wa_zips.csv     # offline fallback zip table (Washington only)
+├── sorter/                   # the team sorter
+├── tests/
+└── tools/                    # zip table, OSRM and drive matrix builders
 ```
 
-## Running the Assignment Workflow
+## Running the Sorter
 
-### Step 1: Assign Home Leagues
-
-Assigns teams to their closest league based on geographic proximity:
+### Step 1: Sort Teams
 
 ```bash
-python assign_home_leagues.py \
-  --teams .data/teams.csv \
-  --leagues .data/leagues.csv \
-  --output .data/output/home_leagues.csv
+python3 -m sorter.cli
 ```
 
+It reads the program, file names and review thresholds from `sorter.toml`, and prints the settings it used. Edit that file to change them, or pass a flag for a single run (`python3 -m sorter.cli --help` lists them).
+
 **What this does:**
-- Calculates distances between team locations and league venues using the haversine formula
-- Assigns each team to the nearest league as their "home league"
-- Outputs a CSV with team-to-league assignments
+- Groups teams by zip code and places each group at the nearest event with room
+- Uses drive minutes if `.data/drive_matrix.csv` exists, otherwise straight-line miles
+- Writes one row per team with its event, coordinates, drive time and distance, and any manual-review flags
 
-### Step 2: Process Event Preferences
+### Step 2: Review the Output
 
-Assigns teams to final events based on submitted preferences:
+Every input team appears once in `.data/team_assignments.csv`:
+- `event_id` filled, `flagged_for_manual_review` = `false`: placed, nothing to check
+- `event_id` filled, `flagged_for_manual_review` = `true`: placed, but `flagged_reason` lists what to check (small or large zip group, long trip, far from any event)
+- `event_id` empty: not placed. `flagged_reason` starts with `unassigned:` and says why (see the README's [When teams come back unassigned](README.md#when-teams-come-back-unassigned))
+
+`.data/event_summary.csv` lists each event with how full it is, and flags empty and under-filled events. The summary the sorter prints counts the flagged teams under each rule. The limits are in the `[review]` section of `sorter.toml`; the README's [Reading the results](README.md#reading-the-results) lists the defaults.
+
+When any team is not placed, the sorter finishes with an error code (1), so an incomplete run isn't mistaken for a finished one.
+
+### Optional: Review Map
 
 ```bash
-python process_event_preferences.py \
-  --home-leagues .data/output/home_leagues.csv \
-  --preferences .data/preferences.csv \
-  --leagues .data/leagues.csv \
-  --output .data/output/final_assignments.csv
+python3 tools/make_map.py --serve
 ```
 
-**What this does:**
-- Processes submitted event preferences (prioritized 1→N)
-- Assigns teams to their highest-available preference
-- Falls back to home league if all preferences are full
-- Handles edge cases (no preferences submitted, all choices unavailable)
+VS Code offers to open the **Review map** port (8765); you can also open it from the Ports tab. Leave the port's visibility at **Private**: the map lists team names, and Private means only you, signed in to GitHub, can open it. Press Ctrl+C in the terminal to stop the server. See the README's "Review map" section for what the map shows.
 
-### Step 3: Review Outputs
+### Optional: Drive Times
 
-Generated files in `.data/output/`:
-- `home_leagues.csv` — Initial proximity-based assignments
-- `final_assignments.csv` — Final event assignments incorporating preferences
-- Any validation reports or logs
+```bash
+bash tools/enable_drive_times.sh
+```
+
+This downloads the road map for each state in `sorter.toml`, builds a local route planner (OSRM), and saves the drive times as `.data/drive_matrix.csv`. Run the sorter again afterwards. Read the memory note under [Machine Types & Performance](#machine-types--performance) first: the default machine may not have enough memory.
+
+Kevin's original scripts (`assign_home_leagues.py`, `process_event_preferences.py`) read fixed file paths under `./data/` and need the `uszipcode` package, which doesn't install on Python 3.12, so they don't run in this codespace. Use the sorter instead.
 
 ## Cost Management & Free Tier
 
@@ -145,8 +152,8 @@ Generated files in `.data/output/`:
 ### Cost-Saving Best Practices
 
 1. **Use the default 2-core machine** (automatically selected by the devcontainer config)
-   - Don't manually upgrade to 4-core or 8-core unless you have a specific performance need
-   - The default is sufficient for this project's Python scripts
+   - Don't switch to a 4-core or 8-core machine unless you need to
+   - The default is enough for sorting teams. Building drive times may need a larger machine for a few minutes; see [Machine Types & Performance](#machine-types--performance)
 
 2. **Set an idle timeout:**
    - Go to https://github.com/settings/codespaces
@@ -161,7 +168,7 @@ Generated files in `.data/output/`:
 4. **Stop your codespace when done:**
    - Click the codespace name in the bottom-left corner
    - Select "Stop Current Codespace"
-   - Or close the browser tab — it will auto-stop after the idle timeout
+   - Or close the browser tab; it stops on its own after the idle timeout
 
 5. **Monitor your usage:**
    - View current usage: https://github.com/settings/billing/summary
@@ -169,7 +176,13 @@ Generated files in `.data/output/`:
 
 ## Machine Types & Performance
 
-This repository's devcontainer configuration defaults to a **2-core/8GB RAM** machine. For this project's workload (CSV processing, distance calculations), the default machine is sufficient.
+This repository's codespace starts on a **2-core / 8 GB** machine. That is enough for sorting teams.
+
+**Building drive times needs more memory than using them.** Building the route planner used 4.7 GB of memory for Washington alone and 6.4 GB for Washington plus Oregon, measured on a Mac. In our test on the default 8 GB codespace, the Washington plus Oregon build failed. We haven't confirmed that memory was the cause. Two ways around it:
+- Build `.data/drive_matrix.csv` on a computer with more memory, then upload just that file into `.data` in the codespace. The sorter reads it the same way, and the codespace stays on the default machine.
+- Switch to a 4-core / 16 GB machine for the build, at twice the cost per hour, then switch back. The built route planner is saved, so later rebuilds work on the default machine.
+
+The drive times only need rebuilding when the teams or events change.
 
 **Available machine types:**
 | Cores | RAM | Storage | Cost Multiplier |
@@ -195,10 +208,32 @@ This repository's devcontainer configuration defaults to a **2-core/8GB RAM** ma
 **Symptom:** Stuck on "Creating codespace..." or "Setting up..."
 
 **Solutions:**
-1. Wait 5 minutes — initial setup can be slow
+1. Wait 5 minutes; the first setup can be slow
 2. Check [GitHub Status](https://www.githubstatus.com/) for service outages
 3. Try creating a new codespace (delete the stuck one first)
 4. Check your account's storage/compute limits aren't exceeded
+
+### Codespace Opens in Recovery Mode
+
+**Symptom:** A message says the codespace is running in recovery mode because of a configuration problem. The creation log ends with `Failed to create container` and `Creating recovery container`.
+
+**What it means:** the setup instructions in `.devcontainer/devcontainer.json` failed, so GitHub started a bare fallback machine instead. None of this repository's setup ran: no Python 3.12, no packages, no `.data/zips.csv`. The first `ERROR` line in the creation log names the step that failed.
+
+**Solutions:**
+1. If the fix is already on GitHub, download it inside the recovery codespace:
+   ```bash
+   git pull
+   ```
+2. Rebuild from the updated configuration. Pulling alone does not change the running container:
+   - Press `Cmd+Shift+P` / `Ctrl+Shift+P`
+   - Type "Rebuild" and select **Codespaces: Rebuild Container**
+   - Choose **Full Rebuild** in the confirmation dialog. The codespace restarts and runs the full setup again
+   - From a terminal outside the codespace, `gh codespace rebuild --full` does the same
+3. If the rebuild still ends in recovery mode, delete the codespace and create a new one on the same branch. Copy any files you added to `.data/` out first; deleting a codespace deletes them.
+
+### After Pulling Changes to `.devcontainer/`
+
+A `git pull` that changes `.devcontainer/devcontainer.json`, `requirements.txt` or `setup.sh` updates the files but not the running container. Run **Codespaces: Rebuild Container** to apply them, and choose **Full Rebuild** if the base image or features changed. Files in the repository folder, including `.data/`, survive a rebuild ([GitHub docs](https://docs.github.com/en/codespaces/developing-in-a-codespace/rebuilding-the-container-in-a-codespace#persisting-data-over-a-rebuild)).
 
 ### Dependencies Not Installed
 
@@ -235,6 +270,10 @@ Or configure in your GitHub account settings to apply to all codespaces automati
 2. Confirm files are uploaded (drag-and-drop into VS Code file explorer)
 3. Check file paths in your commands match the actual file names
 
+**Symptom:** `Warning: .data/zips.csv not found; using reference/wa_zips.csv`
+
+**Fix:** Run `bash setup.sh`. It needs network access to download the zip database the first time.
+
 ### Out of Storage/Compute Hours
 
 **Symptom:** "You have exceeded your storage/compute quota"
@@ -250,9 +289,10 @@ Or configure in your GitHub account settings to apply to all codespaces automati
 ### What's Git-Ignored
 
 The `.gitignore` file prevents these from being committed:
-- `.data/` — Your input/output files (teams, preferences, assignments)
-- `data/` — Legacy data directory
-- `output/` — Generated files
+- `.data/`: Your input/output files (teams, events, assignments, drive matrix)
+- `data/`: Legacy data directory used by Kevin's original scripts
+- `output/`: Generated files
+- `formatted_combined_run/`: Local run output
 
 **Before committing:**
 ```bash
@@ -260,7 +300,7 @@ The `.gitignore` file prevents these from being committed:
 git status
 
 # Should NOT see .data/ files listed
-# If they appear, they're not being ignored — stop and verify .gitignore
+# If they appear, they're not being ignored: stop and verify .gitignore
 ```
 
 ### Best Practices
@@ -274,11 +314,11 @@ git status
 
 ### Installing Additional Tools
 
-Add to `postCreateCommand` in `.devcontainer/devcontainer.json`:
+Append to the existing `postCreateCommand` in `.devcontainer/devcontainer.json`:
 
 ```json
 {
-  "postCreateCommand": "pip install -r requirements.txt && pip install pandas matplotlib"
+  "postCreateCommand": "sudo apt-get update -qq && sudo apt-get install -y -qq osmium-tool && pip install -r requirements.txt && bash setup.sh && pip install pandas matplotlib"
 }
 ```
 

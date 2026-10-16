@@ -1,0 +1,41 @@
+# Team sorter settings. Edit this file, then run:
+#
+#   python3 -m sorter.cli
+#
+# Any setting can be overridden for one run with a command-line flag
+# (python3 -m sorter.cli --help lists them). This file holds settings only:
+# team and event data stay in .data/, which git ignores.
+
+program = "FLL"            # FLL, FTC or FRC
+
+# States the zip table and road map cover. After changing this, rerun
+# `bash setup.sh`, then `bash tools/enable_drive_times.sh` if you use drive times.
+states = ["WA", "OR"]
+
+[files]
+teams           = ".data/teams.csv"             # team_number,team_name,zip_code[,host]
+events          = ".data/events.csv"            # event_code,event_zip,capacity
+pre_assignments = ".data/pre-assignments.csv"   # event,team_id,is_host_team,notes; used only if it exists
+output          = ".data/team_assignments.csv"
+event_summary   = ".data/event_summary.csv"     # one row per event: fill, and why it was flagged
+drive_matrix    = ".data/drive_matrix.csv"      # without it the sorter uses straight-line miles
+
+[sorting]
+method     = "bump"        # bump, largest or regret
+ferry_wait = 30            # minutes added to trips that use a ferry
+
+[review]                   # rows past these limits get flagged_for_manual_review
+small_zip      = 3         # this many teams in a zip, or fewer
+large_zip      = 30        # this many teams in a zip, or more
+assigned_miles = 40        # assigned event farther than this
+nearest_miles  = 75        # nearest event farther than this
+travel_minutes = 90        # travel over this (straight-line miles when there is no drive matrix)
+looks_closer_minutes = 30  # an event nearer as the crow flies is at least this much longer by road
+                           # (water or mountains in the way); needs a drive matrix
+underfilled_percent  = 50  # events below this share of capacity are flagged; empty events always are
+
+# Replace a zip's centre point when it routes badly, e.g. when it lands in a forest or on
+# water. Applied by setup.sh when it builds .data/zips.csv; afterwards rerun setup.sh and
+# rebuild the drive matrix (bash tools/enable_drive_times.sh). Coordinates are public places.
+[zip_overrides]
+"98027" = { lat = 47.5221, lon = -122.0280, note = "Issaquah High School. The zip centre is in Tiger Mountain State Forest and snaps to a gravel forest road, adding 50-60 minutes to every drive." }
