@@ -72,10 +72,15 @@ class CliEndToEndTest(unittest.TestCase):
 
     def run_cli(self, *extra):
         d = self.d
-        cmd = [sys.executable, "-m", "sorter.cli", "--program", "FLL", "--teams", d / "teams.csv",
+        # Own config, so the repo's sorter.toml and any local .data/ files can't leak in.
+        (d / "sorter.toml").write_text(f'[files]\npre_assignments = "{d / "no-pre.csv"}"\n')
+        cmd = [sys.executable, "-m", "sorter.cli", "--config", d / "sorter.toml",
+               "--program", "FLL", "--teams", d / "teams.csv",
                "--events", d / "events.csv", "--zips", d / "zips.csv", "--zip-states", d / "zip_states.csv",
                "--out", d / "out.csv", *extra]
         result = subprocess.run([str(c) for c in cmd], cwd=ROOT, capture_output=True, text=True)
+        if not (d / "out.csv").exists():
+            return result, {}
         with open(d / "out.csv") as f:
             reader = csv.DictReader(f)
             rows = {r["team_id"]: r for r in reader}
@@ -141,6 +146,37 @@ class CliEndToEndTest(unittest.TestCase):
     def test_every_input_team_is_in_the_output(self):
         _, rows = self.run_cli("--drive-matrix", self.d / "drive.csv")
         self.assertEqual(sorted(rows), ["1", "2", "3", "4", "5", "6"])
+
+    def test_config_file_alone_drives_a_run(self):
+        d = self.d
+        (d / "run.toml").write_text(
+            'program = "FTC"\n'
+            f'[files]\nteams = "{d / "teams.csv"}"\nevents = "{d / "events.csv"}"\n'
+            f'output = "{d / "cfg-out.csv"}"\ndrive_matrix = "{d / "drive.csv"}"\n'
+            f'pre_assignments = "{d / "no-pre.csv"}"\n'
+            '[review]\nsmall_zip = 0\n')
+        cmd = [sys.executable, "-m", "sorter.cli", "--config", d / "run.toml",
+               "--zips", d / "zips.csv", "--zip-states", d / "zip_states.csv"]
+        result = subprocess.run([str(c) for c in cmd], cwd=ROOT, capture_output=True, text=True)
+        self.assertIn("Settings from", result.stdout)
+        with open(d / "cfg-out.csv") as f:
+            rows = {r["team_id"]: r for r in csv.DictReader(f)}
+        self.assertEqual(rows["1"]["program"], "FTC")
+        self.assertEqual(rows["1"]["flagged_for_manual_review"], "false")  # small_zip = 0 from the file
+
+    def test_pre_assignment_for_unknown_team_or_event_stops_the_run(self):
+        (self.d / "pre.csv").write_text("SEA,1\nSEA,999\nNOPE,5\n")
+        result, _ = self.run_cli("--drive-matrix", self.d / "drive.csv", "--pre-assignments", self.d / "pre.csv")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("1 team number(s) not in the teams file: 999", result.stderr)
+        self.assertIn("event code(s) not in the events file: NOPE", result.stderr)
+
+    def test_bad_config_stops_with_a_message(self):
+        (self.d / "bad.toml").write_text("[review]\nsmall_zips = 2\n")
+        result = subprocess.run([sys.executable, "-m", "sorter.cli", "--config", str(self.d / "bad.toml")],
+                                cwd=ROOT, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("unknown setting 'review.small_zips'", result.stderr)
 
 
 if __name__ == "__main__":

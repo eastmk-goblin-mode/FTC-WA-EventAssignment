@@ -6,7 +6,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from . import geo, assign, review
+from . import geo, assign, review, config
 
 
 def load_events(path):
@@ -64,6 +64,20 @@ def load_pre_assignments(path):
                 if len(row) > 2 and row[2].strip():
                     notes[team_num] = ",".join(row[2:]).strip()
     return locks, notes
+
+
+def check_pre_assignments(locks, teams, events):
+    """Problems that make a pre-assignment file unusable: unknown teams or unknown events."""
+    team_nums = {t["num"] for t in teams}
+    event_codes = {e["code"] for e in events}
+    problems = []
+    unknown_teams = sorted(t for t in locks if t not in team_nums)
+    unknown_events = sorted({e for e in locks.values() if e not in event_codes})
+    if unknown_teams:
+        problems.append(f"{len(unknown_teams)} team number(s) not in the teams file: {', '.join(unknown_teams)}")
+    if unknown_events:
+        problems.append(f"event code(s) not in the events file: {', '.join(unknown_events)}")
+    return problems
 
 
 def unassigned_reason(zip_code, zips, zip_states, region, mode, missing_drive_time):
@@ -182,44 +196,43 @@ def write_map_output(output_path, teams, team_names, team_host, assignment, even
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
-        description="Assign teams to events using zip-bucket greedy algorithm"
+        description="Assign teams to events using zip-bucket greedy assignment. Settings come from "
+                    "sorter.toml; any flag below overrides the file for this run."
     )
+    parser.add_argument("--config", help="Settings file (default: ./sorter.toml if present)")
     
-    # Required inputs
-    parser.add_argument("--teams", required=True, help="Teams CSV (number,name,zip)")
-    parser.add_argument("--events", required=True, help="Events CSV (code,zip,capacity)")
-    parser.add_argument("--program", required=True, choices=["FLL", "FTC", "FRC"],
-                       help="Competition program (FLL, FTC, or FRC)")
-    
-    # Optional inputs
-    parser.add_argument("--zips", 
+    # Inputs and output (defaults: [files] in sorter.toml)
+    parser.add_argument("--program", choices=config.PROGRAMS, help="Competition program")
+    parser.add_argument("--teams", help="Teams CSV (number,name,zip[,host])")
+    parser.add_argument("--events", help="Events CSV (code,zip,capacity)")
+    parser.add_argument("--pre-assignments", help="Pre-assigned teams CSV (event_code,team_number[,notes])")
+    parser.add_argument("--out", help="Output CSV")
+    parser.add_argument("--drive-matrix", help="Drive matrix CSV; without it, straight-line miles are used")
+    parser.add_argument("--zips",
                        help="Zip centroids CSV (default: .data/zips.csv, falls back to reference/wa_zips.csv)")
-    parser.add_argument("--drive-matrix", default=".data/drive_matrix.csv",
-                       help="Drive matrix CSV (default: .data/drive_matrix.csv)")
     parser.add_argument("--zip-states", default=".data/zip_states.csv",
                        help="Zip-to-state index for out-of-region flags (default: .data/zip_states.csv)")
-    parser.add_argument("--pre-assignments",
-                       help="Pre-assigned teams CSV (event_code,team_number)")
     
-    # Output
-    parser.add_argument("--out", default=".data/team_assignments.csv",
-                       help="Output map CSV (default: .data/team_assignments.csv)")
+    # Sorting and review (defaults: [sorting] and [review] in sorter.toml)
+    parser.add_argument("--method", choices=config.METHODS, help="Ordering strategy")
+    parser.add_argument("--ferry-wait", type=float, help="Minutes added to trips that use a ferry")
+    parser.add_argument("--flag-over", type=float,
+                       help="Flag travel over this: drive minutes, or straight-line miles without a matrix")
+    parser.add_argument("--flag-miles", type=float, help="Flag teams whose assigned event is farther than this")
+    parser.add_argument("--flag-nearest-miles", type=float, help="Flag teams whose nearest event is farther than this")
+    parser.add_argument("--small-zip", type=int, help="Flag zips with this many teams or fewer")
+    parser.add_argument("--large-zip", type=int, help="Flag zips with this many teams or more")
     
-    # Algorithm options
-    parser.add_argument("--method", choices=["bump", "largest", "regret"], default="bump",
-                       help="Ordering strategy (default: bump)")
-    parser.add_argument("--flag-over", type=float, default=90,
-                       help="Flag travel over this: drive minutes, or straight-line miles without a matrix (default: 90)")
-    parser.add_argument("--flag-miles", type=float, default=40,
-                       help="Flag teams whose assigned event is farther than this many miles (default: 40)")
-    parser.add_argument("--flag-nearest-miles", type=float, default=75,
-                       help="Flag teams whose nearest event is farther than this many miles (default: 75)")
-    parser.add_argument("--small-zip", type=int, default=3,
-                       help="Flag zips with this many teams or fewer (default: 3)")
-    parser.add_argument("--large-zip", type=int, default=30,
-                       help="Flag zips with this many teams or more (default: 30)")
-    
-    args = parser.parse_args()
+    parsed = vars(parser.parse_args())
+    try:
+        settings, config_path = config.resolve({k: parsed[k] for k in config.DEFAULTS}, parsed["config"])
+    except config.ConfigError as e:
+        parser.exit(2, f"Error: {e}\n")
+    args = argparse.Namespace(**{**parsed, **settings})
+    print(f"Settings from {config_path or 'built-in defaults'}: program={args.program}, method={args.method}, "
+          f"ferry_wait={args.ferry_wait:g}, review small_zip={args.small_zip} large_zip={args.large_zip} "
+          f"assigned_miles={args.flag_miles:g} nearest_miles={args.flag_nearest_miles:g} "
+          f"travel={args.flag_over:g}")
     
     # Load data
     try:
@@ -244,6 +257,14 @@ def main():
         events = load_events(args.events)
         teams, team_names, team_host = load_teams(args.teams)
         locks, override_notes = load_pre_assignments(args.pre_assignments)
+        problems = check_pre_assignments(locks, teams, events)
+        if problems:
+            print(f"Error: {args.pre_assignments} does not match this season's files:", file=sys.stderr)
+            for p in problems:
+                print(f"  {p}", file=sys.stderr)
+            print("Fix or remove the file, or point [files] pre_assignments in sorter.toml at the right one.",
+                  file=sys.stderr)
+            sys.exit(2)
         rules = review.Rules(small_zip=args.small_zip, large_zip=args.large_zip,
                              assigned_miles=args.flag_miles, nearest_miles=args.flag_nearest_miles,
                              travel=args.flag_over)
@@ -254,8 +275,8 @@ def main():
             print(f"Using drive times from {args.drive_matrix}")
             drive_matrix = geo.load_drive_matrix(args.drive_matrix)
             miles_matrix = geo.load_drive_miles(args.drive_matrix)
-            distance_fn = lambda a, b: geo.drive_minutes(a, b, drive_matrix)
-            miles_fn = lambda a, b: geo.drive_miles(a, b, drive_matrix, miles_matrix)
+            distance_fn = lambda a, b: geo.drive_minutes(a, b, drive_matrix, ferry_wait=args.ferry_wait)
+            miles_fn = lambda a, b: geo.drive_miles(a, b, drive_matrix, miles_matrix, ferry_wait=args.ferry_wait)
             mode = "drive"
         else:
             print(f"Drive matrix not found at {args.drive_matrix}, using straight-line miles")
