@@ -69,7 +69,7 @@ git check-ignore .data  # Should output: .data
 **Place your input files here** (drag and drop into the VS Code file explorer):
 - `.data/teams.csv` — `team_number,team_name,zip_code`, no header row
 - `.data/events.csv` — `event_code,event_zip,capacity`, no header row
-- `.data/pre-assignments.csv` — `event_code,team_number` (optional; lines starting with `#` are comments)
+- `.data/pre-assignments.csv` — `event,team_id,is_host_team,notes` (optional; see File Formats in the README. Convert an old `#`-comment file with `python3 tools/convert_pre_assignments.py OLD.csv NEW.csv`)
 
 **Example file structure:**
 ```

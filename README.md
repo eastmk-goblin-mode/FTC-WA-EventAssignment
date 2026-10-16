@@ -117,7 +117,13 @@ For methodology details and trade-offs, see the algorithm comparison analysis (t
 **Input CSVs:**
 - `teams.csv`: `team_number,team_name,zip_code[,host]` (a non-blank `host` other than false/no/0 marks a host team)
 - `events.csv`: `event_code,event_zip,capacity`
-- `pre-assignments.csv` (optional): `event_code,team_number[,notes]`
+- `pre-assignments.csv` (optional): `event,team_id,is_host_team,notes`, one row per team you place by hand. `event` is the event code (FLL) or league name (FTC). Write `is_host_team` (or yes/true) to mark a host team, or leave it blank. A header row is optional, spaces around values are ignored, and a row with only a note in the third column also works:
+  ```
+  NORTH-SUN,1001,is_host_team,testing host preassignment notes
+  SOUTH-SAT, 1002, because I am a chaos gremlin
+  LeagueA,1003, ,COACH REQUESTS
+  ```
+  Each of these teams comes out with `from_manual_override` = true and its note in `manual_override_notes`. A host flag here counts the same as one in `teams.csv`. The old format, with `#` comment lines above the entries, now stops the run; convert an old file with `python3 tools/convert_pre_assignments.py OLD.csv NEW.csv`, which turns each comment into the note for the rows below it.
 
 **Output CSV** (one row per input team):
 - **Required by the map team:** `team_id, team_name, team_zipCode, team_coordinates, event_id, event_zipCode, event_coordinates, program`

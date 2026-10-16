@@ -5,6 +5,7 @@ import math
 import sys
 from collections import Counter
 from pathlib import Path
+from typing import NamedTuple
 
 from . import geo, assign, review, config
 
@@ -44,35 +45,66 @@ def load_teams(path):
     return teams, team_names, team_host
 
 
+class Override(NamedTuple):
+    """One row of the pre-assignments file: where the team goes, and what staff wrote about it."""
+    event: str
+    is_host_team: bool
+    notes: str
+
+
+class PreAssignmentError(ValueError):
+    pass
+
+
+PRE_ASSIGNMENT_HEADER = ["event", "team_id", "is_host_team", "notes"]
+HOST_WORDS = {"is_host_team", "host", "true", "yes", "y", "1"}
+
+
 def load_pre_assignments(path):
-    """Load pre-assignments from CSV: event_code, team_number[, notes].
-    
-    Returns ({team_number: event_code}, {team_number: notes}). Lines starting with # are comments.
+    """Load pre-assignments from CSV: event, team_id[, is_host_team[, notes]].
+
+    The event column holds an event code (FLL) or a league name (FTC). Spaces around values are
+    ignored, a header row is optional, and unquoted commas after the third comma stay in the notes.
+    With exactly three columns the third is a note unless it is a host word or a false word, so
+    "SOUTH-SAT,1002,because I asked" keeps its note. Returns {team_id: Override}.
     """
     if not path or not Path(path).exists():
-        return {}, {}
-    
-    locks, notes = {}, {}
-    with open(path, encoding="utf-8-sig") as f:
-        reader = csv.reader(f)
-        for row in reader:
-            if not row or not row[0] or row[0].startswith("#"):
+        return {}
+
+    overrides = {}
+    with open(path, encoding="utf-8-sig", newline="") as f:
+        for line, raw in enumerate(csv.reader(f), start=1):
+            row = [c.strip() for c in raw]
+            if not any(row):
                 continue
-            if len(row) >= 2:
-                event_code, team_num = row[0].strip(), row[1].strip()
-                locks[team_num] = event_code
-                if len(row) > 2 and row[2].strip():
-                    notes[team_num] = ",".join(row[2:]).strip()
-    return locks, notes
+            if row[0].startswith("#"):
+                raise PreAssignmentError(
+                    f"line {line}: '#' comment lines are the old format; put the comment in the notes "
+                    f"column instead ({','.join(PRE_ASSIGNMENT_HEADER)}). To convert a whole file: "
+                    f"python3 tools/convert_pre_assignments.py OLD.csv NEW.csv")
+            if [c.lower() for c in row[:2]] in (["event", "team_id"], ["league", "team_id"]):
+                continue
+            if len(row) < 2 or not row[0] or not row[1]:
+                raise PreAssignmentError(f"line {line}: needs an event and a team_id, got {','.join(row)!r}")
+            host, notes = (row[2], "") if len(row) > 2 else ("", "")
+            if len(row) == 3 and host.lower() not in HOST_WORDS | review.FALSE_WORDS:
+                host, notes = "", host
+            elif len(row) > 3:
+                notes = ",".join(raw[3:]).strip()
+            if host.lower() not in HOST_WORDS | review.FALSE_WORDS:
+                raise PreAssignmentError(
+                    f"line {line}: is_host_team is {host!r}; leave it blank or write is_host_team")
+            overrides[row[1]] = Override(row[0], review.truthy(host), notes)
+    return overrides
 
 
-def check_pre_assignments(locks, teams, events):
+def check_pre_assignments(overrides, teams, events):
     """Problems that make a pre-assignment file unusable: unknown teams or unknown events."""
     team_nums = {t["num"] for t in teams}
     event_codes = {e["code"] for e in events}
     problems = []
-    unknown_teams = sorted(t for t in locks if t not in team_nums)
-    unknown_events = sorted({e for e in locks.values() if e not in event_codes})
+    unknown_teams = sorted(t for t in overrides if t not in team_nums)
+    unknown_events = sorted({o.event for o in overrides.values() if o.event not in event_codes})
     if unknown_teams:
         problems.append(f"{len(unknown_teams)} team number(s) not in the teams file: {', '.join(unknown_teams)}")
     if unknown_events:
@@ -131,17 +163,18 @@ def write_event_summary(path, events, assignment, rules):
 
 
 def write_map_output(output_path, teams, team_names, team_host, assignment, events, zips,
-                     distance_fn, mode, program, rules, miles_fn, overrides=None, override_notes=None,
+                     distance_fn, mode, program, rules, miles_fn, overrides=None,
                      zip_states=None, region=()):
     """Write one row per input team, in OUTPUT_COLUMNS order.
 
     distance_fn is the travel cost the sorter used (drive minutes, or straight-line miles);
     miles_fn gives the distance in miles for the same route (drive miles, or straight-line).
+    overrides is {team_id: Override} from the pre-assignments file; those rows are marked
+    from_manual_override with the file's notes, and its host flag adds to the teams file's.
     Returns (counts, unassigned_zips, reason_counts).
     """
     event_zips = {e["code"]: e["zip"] for e in events}
     overrides = overrides or {}
-    override_notes = override_notes or {}
     zip_counts = Counter(t["zip"] for t in teams)
     unit = "drive" if mode == "drive" else "straight-line"
     counts = Counter()
@@ -203,6 +236,7 @@ def write_map_output(output_path, teams, team_names, team_host, assignment, even
             for r in reasons:
                 reason_counts[summary_key(r)] += 1
 
+            override = overrides.get(team["num"])
             writer.writerow([
                 team["num"],
                 team_names.get(team["num"], ""),
@@ -212,9 +246,9 @@ def write_map_output(output_path, teams, team_names, team_host, assignment, even
                 event_zip,
                 event_wkt,
                 program,
-                boolean(review.truthy(team_host.get(team["num"], ""))),
-                boolean(team["num"] in overrides),
-                override_notes.get(team["num"], ""),
+                boolean(review.truthy(team_host.get(team["num"], "")) or (override and override.is_host_team)),
+                boolean(override),
+                override.notes if override else "",
                 blank(travel) if mode == "drive" else "",
                 blank(assigned_miles) if mode == "drive" else "",
                 boolean(reasons),
@@ -236,7 +270,7 @@ def main():
     parser.add_argument("--program", choices=config.PROGRAMS, help="Competition program")
     parser.add_argument("--teams", help="Teams CSV (number,name,zip[,host])")
     parser.add_argument("--events", help="Events CSV (code,zip,capacity)")
-    parser.add_argument("--pre-assignments", help="Pre-assigned teams CSV (event_code,team_number[,notes])")
+    parser.add_argument("--pre-assignments", help="Pre-assigned teams CSV (event,team_id[,is_host_team[,notes]])")
     parser.add_argument("--out", help="Output CSV")
     parser.add_argument("--drive-matrix", help="Drive matrix CSV; without it, straight-line miles are used")
     parser.add_argument("--zips",
@@ -293,8 +327,12 @@ def main():
         region = geo.table_states(zips_path) or {"WA"}  # reference/wa_zips.csv has no state column
         events = load_events(args.events)
         teams, team_names, team_host = load_teams(args.teams)
-        locks, override_notes = load_pre_assignments(args.pre_assignments)
-        problems = check_pre_assignments(locks, teams, events)
+        try:
+            overrides = load_pre_assignments(args.pre_assignments)
+        except PreAssignmentError as e:
+            print(f"Error: {args.pre_assignments} {e}", file=sys.stderr)
+            sys.exit(2)
+        problems = check_pre_assignments(overrides, teams, events)
         if problems:
             print(f"Error: {args.pre_assignments} does not match this season's files:", file=sys.stderr)
             for p in problems:
@@ -324,8 +362,8 @@ def main():
         
         # Run assignment
         print(f"Assigning {len(teams)} teams to {len(events)} events using '{args.method}' method...")
-        if locks:
-            print(f"Pre-assigned {len(locks)} teams")
+        if overrides:
+            print(f"Pre-assigned {len(overrides)} teams")
         
         assignment = assign.greedy(
             events=events,
@@ -333,7 +371,7 @@ def main():
             zips=zips,
             distance_fn=distance_fn,
             order=args.method,
-            locks=locks
+            locks={team: o.event for team, o in overrides.items()}
         )
         
         # Write output
@@ -351,8 +389,7 @@ def main():
             program=args.program,
             rules=rules,
             miles_fn=miles_fn,
-            overrides=locks,
-            override_notes=override_notes,
+            overrides=overrides,
             zip_states=zip_states,
             region=region
         )

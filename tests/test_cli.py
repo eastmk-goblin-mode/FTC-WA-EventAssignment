@@ -130,13 +130,32 @@ class CliEndToEndTest(unittest.TestCase):
 
     def test_manual_override_columns(self):
         write_csv(self.d / "events.csv", [("SEA", "98101", 10), ("TAC", "98402", 10)])
-        (self.d / "pre.csv").write_text("#pre TAC\nTAC,5,Coach asked to stay south\nSEA,6\n")
+        (self.d / "pre.csv").write_text("TAC, 5, is_host_team, Coach asked to stay south\nSEA,6\n")
         _, rows = self.run_cli("--drive-matrix", self.d / "missing.csv", "--pre-assignments", self.d / "pre.csv")
-        self.assertEqual((rows["5"]["event_id"], rows["5"]["from_manual_override"],
-                          rows["5"]["manual_override_notes"]), ("TAC", "true", "Coach asked to stay south"))
-        self.assertEqual((rows["6"]["event_id"], rows["6"]["from_manual_override"],
-                          rows["6"]["manual_override_notes"]), ("SEA", "true", ""))
-        self.assertEqual(rows["1"]["from_manual_override"], "false")
+        self.assertEqual([rows["5"][k] for k in ("event_id", "is_host_team", "from_manual_override",
+                                                  "manual_override_notes")],
+                         ["TAC", "true", "true", "Coach asked to stay south"])
+        self.assertEqual([rows["6"][k] for k in ("event_id", "is_host_team", "from_manual_override",
+                                                  "manual_override_notes")], ["SEA", "false", "true", ""])
+        self.assertEqual([rows["1"][k] for k in ("event_id", "from_manual_override", "manual_override_notes")],
+                         ["SEA", "false", ""])
+
+    def test_ftc_override_file_keeps_notes_and_places_teams(self):
+        write_csv(self.d / "events.csv", [("SEA", "98101", 10), ("TAC", "98402", 10)])
+        (self.d / "pre.csv").write_text("SEA,5, ,COACH REQUESTS\r\nSEA,6,,registered late\r\n")
+        result, rows = self.run_cli("--drive-matrix", self.d / "missing.csv", "--pre-assignments",
+                                    self.d / "pre.csv")
+        self.assertIn("Pre-assigned 2 teams", result.stdout)
+        self.assertEqual({t: (rows[t]["event_id"], rows[t]["is_host_team"], rows[t]["manual_override_notes"])
+                          for t in "56"},
+                         {"5": ("SEA", "false", "COACH REQUESTS"), "6": ("SEA", "false", "registered late")})
+
+    def test_old_comment_format_stops_the_run_with_the_fix(self):
+        (self.d / "pre.csv").write_text("#pre TAC\nTAC,5\n")
+        result, _ = self.run_cli("--drive-matrix", self.d / "drive.csv", "--pre-assignments", self.d / "pre.csv")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("line 1: '#' comment lines are the old format", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
 
     def test_host_team_column_becomes_a_boolean(self):
         write_csv(self.d / "teams.csv", [("1", "Near", "98101", "yes"), ("5", "Tacoma A", "98402", ""),
