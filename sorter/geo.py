@@ -21,6 +21,24 @@ def load_zips(path):
     return zips
 
 
+def load_zip_states(path):
+    """Load the zip-to-state index written by tools/build_zip_table.py.
+
+    Returns {zip: state}, or {} if the index does not exist (offline fallback setup).
+    """
+    try:
+        with open(path) as f:
+            return {row["zip"]: row["state"] for row in csv.DictReader(f)}
+    except FileNotFoundError:
+        return {}
+
+
+def table_states(path):
+    """States covered by a zip table, read from its state column ({} for older tables)."""
+    with open(path) as f:
+        return {row["state"] for row in csv.DictReader(f) if row.get("state")}
+
+
 def miles_straight_line(zip_a, zip_b, zips):
     """Straight-line miles between zip centroids using haversine formula.
     

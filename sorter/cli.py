@@ -1,6 +1,7 @@
 """Command-line interface for team sorting with map output."""
 import argparse
 import csv
+import math
 import sys
 from collections import Counter
 from pathlib import Path
@@ -63,8 +64,24 @@ def load_pre_assignments(path):
     return locks
 
 
+def unassigned_reason(zip_code, zips, zip_states, region, mode, missing_drive_time):
+    """Why a team was left unassigned, phrased as what the operator should do next.
+
+    missing_drive_time: in drive mode, at least one event has no drive time for this zip.
+    That is checked before capacity because a complete matrix might have placed the team.
+    """
+    if zip_code not in zips:
+        state = zip_states.get(zip_code)
+        if state and state not in region:
+            return f"zip is in {state}, which region.env does not include"
+        return "zip code not found"
+    if mode == "drive" and missing_drive_time:
+        return "missing drive times; rebuild the drive matrix"
+    return "no event with room"
+
+
 def write_map_output(output_path, teams, team_names, team_host, assignment, events, zips,
-                     distance_fn, mode, program, flag_over=90):
+                     distance_fn, mode, program, flag_over=90, zip_states=None, region=()):
     """Write the map file for visualization.
     
     Required columns (map team):
@@ -76,6 +93,7 @@ def write_map_output(output_path, teams, team_names, team_host, assignment, even
     """
     event_zips = {e["code"]: e["zip"] for e in events}
     status_count = Counter()
+    unassigned_zips = {}  # reason -> set of zips
     
     def wkt(zip_code):
         """Return WKT POINT string for a zip centroid."""
@@ -106,12 +124,10 @@ def write_map_output(output_path, teams, team_names, team_host, assignment, even
                 event_zip = ""
                 event_wkt = ""
                 distance = ""
-                if zip_code not in zips:
-                    status = "unassigned"
-                    reason = "zip code not found"
-                else:
-                    status = "unassigned"
-                    reason = "no event with room"
+                status = "unassigned"
+                missing_drive_time = any(not math.isfinite(distance_fn(zip_code, e["zip"])) for e in events)
+                reason = unassigned_reason(zip_code, zips, zip_states or {}, set(region), mode,
+                                           missing_drive_time)
             else:
                 # Assigned
                 event_zip = event_zips[event_code]
@@ -126,6 +142,8 @@ def write_map_output(output_path, teams, team_names, team_host, assignment, even
                     reason = ""
             
             status_count[status] += 1
+            if status == "unassigned":
+                unassigned_zips.setdefault(reason, set()).add(zip_code)
             writer.writerow([
                 team["num"],                        # team_id
                 team_names.get(team["num"], ""),    # team_name
@@ -141,7 +159,7 @@ def write_map_output(output_path, teams, team_names, team_host, assignment, even
                 reason                              # flag_reason
             ])
     
-    return status_count
+    return status_count, unassigned_zips
 
 
 def main():
@@ -161,6 +179,8 @@ def main():
                        help="Zip centroids CSV (default: .data/zips.csv, falls back to reference/wa_zips.csv)")
     parser.add_argument("--drive-matrix", default=".data/drive_matrix.csv",
                        help="Drive matrix CSV (default: .data/drive_matrix.csv)")
+    parser.add_argument("--zip-states", default=".data/zip_states.csv",
+                       help="Zip-to-state index for out-of-region flags (default: .data/zip_states.csv)")
     parser.add_argument("--pre-assignments",
                        help="Pre-assigned teams CSV (event_code,team_number)")
     
@@ -194,6 +214,8 @@ def main():
                 sys.exit(2)
         
         zips = geo.load_zips(zips_path)
+        zip_states = geo.load_zip_states(args.zip_states)
+        region = geo.table_states(zips_path) or {"WA"}  # reference/wa_zips.csv has no state column
         events = load_events(args.events)
         teams, team_names, team_host = load_teams(args.teams)
         locks = load_pre_assignments(args.pre_assignments)
@@ -226,7 +248,7 @@ def main():
         
         # Write output
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-        status_count = write_map_output(
+        status_count, unassigned_zips = write_map_output(
             output_path=args.out,
             teams=teams,
             team_names=team_names,
@@ -237,13 +259,25 @@ def main():
             distance_fn=distance_fn,
             mode=mode,
             program=args.program,
-            flag_over=args.flag_over
+            flag_over=args.flag_over,
+            zip_states=zip_states,
+            region=region
         )
         
         # Report
         print(f"\nResults: {sum(status_count.values())} teams")
         for status, count in sorted(status_count.items()):
             print(f"  {status}: {count}")
+        if unassigned_zips:
+            print("\nUnassigned, by reason (zips):")
+            for reason, zip_set in sorted(unassigned_zips.items()):
+                print(f"  {reason}: {', '.join(sorted(zip_set))}")
+            if "missing drive times; rebuild the drive matrix" in unassigned_zips:
+                print("\nThese zips are in the zip table but not the drive matrix. With OSRM running, rebuild it:")
+                print(f"  python3 tools/build_drive_matrix.py --source osrm --teams {args.teams} --events {args.events}")
+            if any(r.startswith("zip is in ") for r in unassigned_zips):
+                print("\nTo cover another state, add it to STATES in region.env, then rerun setup.sh "
+                      "and tools/enable_drive_times.sh.")
         print(f"\nWrote {args.out}")
         
         # Exit with error if any teams are unassigned
