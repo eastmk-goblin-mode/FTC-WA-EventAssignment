@@ -134,6 +134,7 @@ For methodology details and trade-offs, see the algorithm comparison analysis (t
 | Assigned event over 40 miles | `assigned_miles` (40) | `--flag-miles` |
 | Nearest event over 75 miles | `nearest_miles` (75) | `--flag-nearest-miles` |
 | Travel over 90 drive minutes (straight-line miles without a matrix) | `travel_minutes` (90) | `--flag-over` |
+| Looks closer on the map: an event nearer as the crow flies is 30+ minutes longer by road (water or mountains in the way; drive-matrix runs only) | `looks_closer_minutes` (30) | `--flag-looks-closer` |
 
 Miles are drive miles for the route the sorter chose (ferry or road) when `.data/drive_matrix.csv` exists, straight-line miles otherwise.
 - Coordinates use WKT format: `POINT (longitude latitude)`
@@ -157,6 +158,17 @@ Miles are drive miles for the route the sorter chose (ferry or road) when `.data
 ### Region (which states are covered)
 
 The `states` setting in `sorter.toml` (`states = ["WA", "OR"]`) controls both the zip table and the road map, so they always cover the same states. To add a state (for example Idaho), set `states = ["WA", "OR", "ID"]`, then rerun `bash setup.sh` and, for drive times, `bash tools/enable_drive_times.sh`.
+
+### Zip overrides (when a zip centre routes badly)
+
+Locations come from each zip's centre point. In a large zip that centre can land in a forest or on water, and every drive into the zip then comes out far too long. The `[zip_overrides]` section of `sorter.toml` replaces the centre with a public point you choose:
+
+```toml
+[zip_overrides]
+"98027" = { lat = 47.5221, lon = -122.0280, note = "Issaquah High School" }
+```
+
+The repository ships with this one: the 98027 centre sits in Tiger Mountain State Forest and snapped to a gravel forest road, adding 50-60 minutes to every drive there. After adding or changing an override, rerun `bash setup.sh` (it prints each override it applied), then rebuild the drive matrix with `bash tools/enable_drive_times.sh`. A sign that a zip needs one: drives into it are much slower than drives into other venues, or many teams are flagged "looks closer on the map" toward the same event.
 
 ### When teams come back unassigned
 
