@@ -43,12 +43,17 @@ def greedy(events, teams, zips, distance_fn, order="bump", locks=None):
         return event["cap"] - fill[event["code"]] >= count
     
     def options_for_bucket(zip_code, count):
-        """Get sorted list of (distance, event_index, event) for buckets that fit."""
+        """Get sorted list of (distance, event_index, event) for buckets that fit.
+
+        Events with no computed distance (inf) are not options: placing a team there
+        would hide a missing drive time behind a fake assignment.
+        """
         opts = []
         for i, event in enumerate(events):
             if has_room(event, count):
                 dist = distance_fn(zip_code, event["zip"])
-                opts.append((dist, i, event))
+                if math.isfinite(dist):
+                    opts.append((dist, i, event))
         return sorted(opts)
     
     # Order buckets for placement
@@ -59,7 +64,8 @@ def greedy(events, teams, zips, distance_fn, order="bump", locks=None):
         venue_zips = sorted({e["zip"] for e in events})
         
         def bump_cost(zip_code):
-            distances = sorted(distance_fn(zip_code, vz) for vz in venue_zips)
+            distances = sorted(d for d in (distance_fn(zip_code, vz) for vz in venue_zips)
+                               if math.isfinite(d))
             return distances[1] - distances[0] if len(distances) > 1 else float("inf")
         
         # Sort by bump cost (highest first), then by bucket size (largest first)

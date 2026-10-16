@@ -22,7 +22,13 @@ def load_zips(path):
 
 
 def miles_straight_line(zip_a, zip_b, zips):
-    """Straight-line miles between zip centroids using haversine formula."""
+    """Straight-line miles between zip centroids using haversine formula.
+    
+    Returns float('inf') if either zip is not in the database.
+    """
+    if zip_a not in zips or zip_b not in zips:
+        return float('inf')
+    
     (lat1, lon1), (lat2, lon2) = zips[zip_a][:2], zips[zip_b][:2]
     p1, p2 = math.radians(lat1), math.radians(lat2)
     h = (math.sin((p2 - p1) / 2) ** 2 +
@@ -55,10 +61,13 @@ def drive_minutes(zip_a, zip_b, drive_matrix, ferry_wait=30.0):
         ferry_wait: Minutes to add to routes that use a ferry (default 30)
     
     Returns:
-        Drive time in minutes. Same zip = 0.
+        Drive time in minutes. Same zip = 0. float('inf') if pair not in matrix.
     """
     if zip_a == zip_b:
         return 0.0
+    
+    if (zip_a, zip_b) not in drive_matrix:
+        return float('inf')
     
     ferry_ok, no_ferry = drive_matrix[(zip_a, zip_b)]
     uses_ferry = no_ferry is None or ferry_ok < no_ferry - 0.5
