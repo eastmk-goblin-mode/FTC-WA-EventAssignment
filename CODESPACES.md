@@ -24,7 +24,8 @@ GitHub Codespaces provides a complete, cloud-based development environment that 
 
 The codespace will automatically:
 - ✅ Create a Python 3.12 container
-- ✅ Install all dependencies from `requirements.txt`
+- ✅ Install `osmium-tool` (used only for drive-time mode) and the dependencies in `requirements.txt`
+- ✅ Run `setup.sh`, which creates `.data/` and builds `.data/zips.csv` for the states in `region.env`
 - ✅ Configure git with your GitHub identity
 
 **Expected setup time:** 1-2 minutes
@@ -32,10 +33,14 @@ The codespace will automatically:
 You'll see this in the terminal:
 ```
 Running postCreateCommand...
-pip install -r requirements.txt
 ...
-Successfully installed haversine-2.8.1 uszipcode-1.0.1 ...
+Successfully installed haversine-2.8.1 prettytable-3.10.2 ...
+=== Setting up team sorter ===
+Wrote .data/zips.csv: 1225 zips (WA 733, OR 492).
+✓ Zip table built for the states in region.env
 ```
+
+If setup prints "Could not build the zip table (no network?)", it fell back to `reference/wa_zips.csv`, which covers Washington only. Rerun `bash setup.sh` once the codespace has network access.
 
 ### 3. Verify Your Environment
 
@@ -45,88 +50,81 @@ Once the terminal prompt appears, verify the setup:
 # Check Python version (should be 3.12.x)
 python --version
 
-# Verify dependencies are installed
-pip list | grep haversine
-pip list | grep uszipcode
+# Verify the zip table was built
+head -3 .data/zips.csv
 
-# List repository contents
-ls -la
+# Run the test suite (standard library only, takes about a second)
+python3 -m unittest discover -s tests -t .
 ```
 
-### 4. Set Up Data Directory
+### 4. Add Your Input Files
 
-All input and output files should be stored in the `.data/` directory (git-ignored for privacy):
+All input and output files go in the `.data/` directory, which `setup.sh` created and git ignores:
 
 ```bash
-# Create the data directory
-mkdir -p .data
-
 # Verify it's git-ignored
 git check-ignore .data  # Should output: .data
 ```
 
-**Place your input files here:**
-- `.data/teams.csv` — Team roster with numbers, names, zip codes
-- `.data/leagues.csv` — League/event information with locations
-- `.data/preferences.csv` — Team event preference submissions (optional)
+**Place your input files here** (drag and drop into the VS Code file explorer):
+- `.data/teams.csv` — `team_number,team_name,zip_code`, no header row
+- `.data/events.csv` — `event_code,event_zip,capacity`, no header row
+- `.data/pre-assignments.csv` — `event_code,team_number` (optional; lines starting with `#` are comments)
 
 **Example file structure:**
 ```
 FTC-WA-EventAssignment/
 ├── .data/                    # Your local data (git-ignored)
 │   ├── teams.csv
-│   ├── leagues.csv
-│   ├── preferences.csv
-│   └── output/               # Generated assignments
+│   ├── events.csv
+│   ├── pre-assignments.csv   # optional
+│   ├── zips.csv              # built by setup.sh
+│   ├── zip_states.csv        # built by setup.sh
+│   └── drive_matrix.csv      # built by tools/enable_drive_times.sh (optional)
 ├── .devcontainer/
 │   └── devcontainer.json
-├── model/
-├── assign_home_leagues.py
-└── process_event_preferences.py
+├── region.env                # which states are covered
+├── reference/wa_zips.csv     # offline fallback zip table (Washington only)
+├── sorter/                   # the team sorter
+├── tests/
+└── tools/                    # zip table, OSRM and drive matrix builders
 ```
 
-## Running the Assignment Workflow
+## Running the Sorter
 
-### Step 1: Assign Home Leagues
-
-Assigns teams to their closest league based on geographic proximity:
+### Step 1: Sort Teams
 
 ```bash
-python assign_home_leagues.py \
+python3 -m sorter.cli --program FLL \
   --teams .data/teams.csv \
-  --leagues .data/leagues.csv \
-  --output .data/output/home_leagues.csv
+  --events .data/events.csv \
+  --pre-assignments .data/pre-assignments.csv \
+  --out .data/team_assignments.csv
 ```
 
 **What this does:**
-- Calculates distances between team locations and league venues using the haversine formula
-- Assigns each team to the nearest league as their "home league"
-- Outputs a CSV with team-to-league assignments
+- Groups teams by zip code and places each group at the nearest event with room
+- Uses drive minutes if `.data/drive_matrix.csv` exists, otherwise straight-line miles
+- Writes one row per team with its event, coordinates, travel time or distance, `status` and `flag_reason`
 
-### Step 2: Process Event Preferences
+### Step 2: Review the Output
 
-Assigns teams to final events based on submitted preferences:
+Every input team appears in `.data/team_assignments.csv` as one of:
+- `assigned` — placed at an event
+- `flagged` — placed, but travel is over the `--flag-over` threshold (default 90), so check it
+- `unassigned` — not placed; `flag_reason` says why and what to fix (see the README's "When teams come back unassigned")
+
+The command exits with code 1 when any team is unassigned, so an incomplete run isn't mistaken for a finished one.
+
+### Optional: Drive Times
 
 ```bash
-python process_event_preferences.py \
-  --home-leagues .data/output/home_leagues.csv \
-  --preferences .data/preferences.csv \
-  --leagues .data/leagues.csv \
-  --output .data/output/final_assignments.csv
+bash tools/enable_drive_times.sh
 ```
 
-**What this does:**
-- Processes submitted event preferences (prioritized 1→N)
-- Assigns teams to their highest-available preference
-- Falls back to home league if all preferences are full
-- Handles edge cases (no preferences submitted, all choices unavailable)
+This downloads the OpenStreetMap extract for each state in `region.env`, builds a local OSRM routing server, and writes `.data/drive_matrix.csv`. Rerun the sorter afterwards. See the memory note under [Machine Types & Performance](#machine-types--performance) before running it on the default machine.
 
-### Step 3: Review Outputs
-
-Generated files in `.data/output/`:
-- `home_leagues.csv` — Initial proximity-based assignments
-- `final_assignments.csv` — Final event assignments incorporating preferences
-- Any validation reports or logs
+Kevin's original scripts (`assign_home_leagues.py`, `process_event_preferences.py`) read hardcoded paths under `./data/` and need the `uszipcode` package, which fails on Python 3.12, so they don't run in this codespace.
 
 ## Cost Management & Free Tier
 
@@ -169,7 +167,13 @@ Generated files in `.data/output/`:
 
 ## Machine Types & Performance
 
-This repository's devcontainer configuration defaults to a **2-core/8GB RAM** machine. For this project's workload (CSV processing, distance calculations), the default machine is sufficient.
+This repository's devcontainer configuration defaults to a **2-core/8GB RAM** machine. For sorting teams (CSV processing, straight-line distances, reading a drive matrix), the default machine is sufficient.
+
+**Drive-time mode needs more memory to build than to use.** Building the OSRM routing graph peaked at 4.7 GB of RAM for Washington alone and 6.4 GB for Washington plus Oregon (measured on macOS). That leaves little room on an 8 GB machine, and the build may fail. Two ways to handle it:
+- Build `.data/drive_matrix.csv` on a computer with more memory, then upload only that file into `.data/` in the codespace. The sorter reads it the same way, and the codespace stays on the default machine.
+- Switch to a 4-core/16 GB machine for the build, at twice the cost, then switch back.
+
+The drive matrix only needs rebuilding when the teams or events change.
 
 **Available machine types:**
 | Cores | RAM | Storage | Cost Multiplier |
@@ -235,6 +239,10 @@ Or configure in your GitHub account settings to apply to all codespaces automati
 2. Confirm files are uploaded (drag-and-drop into VS Code file explorer)
 3. Check file paths in your commands match the actual file names
 
+**Symptom:** `Warning: .data/zips.csv not found; using reference/wa_zips.csv`
+
+**Fix:** Run `bash setup.sh`. It needs network access to download the zip database the first time.
+
 ### Out of Storage/Compute Hours
 
 **Symptom:** "You have exceeded your storage/compute quota"
@@ -250,9 +258,10 @@ Or configure in your GitHub account settings to apply to all codespaces automati
 ### What's Git-Ignored
 
 The `.gitignore` file prevents these from being committed:
-- `.data/` — Your input/output files (teams, preferences, assignments)
-- `data/` — Legacy data directory
+- `.data/` — Your input/output files (teams, events, assignments, drive matrix)
+- `data/` — Legacy data directory used by Kevin's original scripts
 - `output/` — Generated files
+- `formatted_combined_run/` — Local run output
 
 **Before committing:**
 ```bash
@@ -274,11 +283,11 @@ git status
 
 ### Installing Additional Tools
 
-Add to `postCreateCommand` in `.devcontainer/devcontainer.json`:
+Append to the existing `postCreateCommand` in `.devcontainer/devcontainer.json`:
 
 ```json
 {
-  "postCreateCommand": "pip install -r requirements.txt && pip install pandas matplotlib"
+  "postCreateCommand": "sudo apt-get update -qq && sudo apt-get install -y -qq osmium-tool && pip install -r requirements.txt && bash setup.sh && pip install pandas matplotlib"
 }
 ```
 
