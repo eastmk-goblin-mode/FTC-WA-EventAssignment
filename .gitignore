@@ -66,3 +66,10 @@ output/
 
 # Local run outputs (may hold team data)
 formatted_combined_run/
+
+# Team data and sorter results (never commit)
+Input Files/*
+!Input Files/.gitkeep
+Output Files/*
+!Output Files/.gitkeep
+.DS_Store
